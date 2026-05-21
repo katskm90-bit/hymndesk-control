@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#E8650A" />
+  <meta name="description" content="HymnDesk Control — internal project management for the HymnDesk team." />
+
+  <title>HymnDesk Control</title>
+
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#FFF6EF',
+              100: '#FEE9D4',
+              200: '#FCCEA0',
+              300: '#F9AC66',
+              400: '#F18A35',
+              500: '#E8650A',
+              600: '#C45007',
+              700: '#9B3F07',
+              800: '#7A330A',
+              900: '#5F2A0C'
+            }
+          },
+          fontFamily: {
+            sans: ['Manrope', 'system-ui', 'sans-serif']
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    html, body { height: 100%; }
+    body { font-family: 'Manrope', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    .focus-ring { outline: none; }
+    .focus-ring:focus-visible { box-shadow: 0 0 0 3px rgba(232,101,10,0.35); }
+    [hidden] { display: none !important; }
+
+    /* loading skeleton */
+    .pulse-dot {
+      animation: pulse 1.4s ease-in-out infinite both;
+    }
+    .pulse-dot:nth-child(2) { animation-delay: 0.2s; }
+    .pulse-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes pulse {
+      0%, 80%, 100% { opacity: 0.3; }
+      40% { opacity: 1; }
+    }
+
+    /* mobile sidebar transition */
+    @media (max-width: 1023px) {
+      #sidebar { transform: translateX(-100%); transition: transform 0.2s ease; }
+      #sidebar.open { transform: translateX(0); }
+    }
+  </style>
+</head>
+<body class="bg-stone-50 text-stone-900">
+
+  <!-- ====================================================================
+       BOOT SCREEN — shown while we check the auth session
+       ==================================================================== -->
+  <div id="boot-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-stone-50">
+    <div class="text-center">
+      <div class="text-2xl font-bold text-brand-500 mb-3">HymnDesk Control</div>
+      <div class="flex justify-center gap-2">
+        <span class="pulse-dot inline-block w-2 h-2 rounded-full bg-brand-500"></span>
+        <span class="pulse-dot inline-block w-2 h-2 rounded-full bg-brand-500"></span>
+        <span class="pulse-dot inline-block w-2 h-2 rounded-full bg-brand-500"></span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ====================================================================
+       LOGIN SCREEN
+       ==================================================================== -->
+  <div id="auth-screen" hidden class="min-h-screen flex items-center justify-center px-4 py-10">
+    <div class="w-full max-w-sm">
+      <div class="text-center mb-8">
+        <div class="text-2xl font-bold text-brand-500">HymnDesk Control</div>
+        <div class="text-sm text-stone-500 mt-1">Internal project management</div>
+      </div>
+
+      <!-- Login form -->
+      <form id="login-form" class="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 space-y-4">
+        <div>
+          <h1 class="text-lg font-semibold">Sign in</h1>
+          <p class="text-sm text-stone-500 mt-1">Use the email address your invitation was sent to.</p>
+        </div>
+
+        <div>
+          <label for="login-email" class="block text-sm font-medium text-stone-700 mb-1">Email</label>
+          <input id="login-email" type="email" required autocomplete="email"
+                 class="focus-ring w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+        </div>
+
+        <div>
+          <label for="login-password" class="block text-sm font-medium text-stone-700 mb-1">Password</label>
+          <input id="login-password" type="password" required autocomplete="current-password"
+                 class="focus-ring w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+        </div>
+
+        <div id="login-error" hidden class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3"></div>
+
+        <button id="login-submit" type="submit"
+                class="focus-ring w-full rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium px-4 py-2.5 text-sm transition-colors">
+          Sign in
+        </button>
+
+        <div class="text-center pt-2">
+          <button id="forgot-password-link" type="button" class="text-sm text-brand-600 hover:text-brand-700 underline-offset-4 hover:underline">
+            Forgot your password?
+          </button>
+        </div>
+      </form>
+
+      <!-- Forgot password form -->
+      <form id="forgot-form" hidden class="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 space-y-4">
+        <div>
+          <h1 class="text-lg font-semibold">Reset your password</h1>
+          <p class="text-sm text-stone-500 mt-1">Enter your email and we will send you a reset link.</p>
+        </div>
+
+        <div>
+          <label for="forgot-email" class="block text-sm font-medium text-stone-700 mb-1">Email</label>
+          <input id="forgot-email" type="email" required autocomplete="email"
+                 class="focus-ring w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+        </div>
+
+        <div id="forgot-message" hidden class="text-sm text-stone-700 bg-stone-100 border border-stone-200 rounded-lg p-3"></div>
+
+        <button id="forgot-submit" type="submit"
+                class="focus-ring w-full rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium px-4 py-2.5 text-sm transition-colors">
+          Send reset link
+        </button>
+
+        <div class="text-center pt-2">
+          <button id="back-to-login-link" type="button" class="text-sm text-stone-600 hover:text-stone-900">
+            Back to sign in
+          </button>
+        </div>
+      </form>
+
+      <!-- Set password form (after invitation accept or password reset) -->
+      <form id="set-password-form" hidden class="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 space-y-4">
+        <div>
+          <h1 class="text-lg font-semibold">Set your password</h1>
+          <p id="set-password-hint" class="text-sm text-stone-500 mt-1">Choose a strong password.</p>
+        </div>
+
+        <div>
+          <label for="new-password" class="block text-sm font-medium text-stone-700 mb-1">New password</label>
+          <input id="new-password" type="password" required minlength="8" autocomplete="new-password"
+                 class="focus-ring w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+          <p class="text-xs text-stone-500 mt-1">Minimum eight characters.</p>
+        </div>
+
+        <div>
+          <label for="confirm-password" class="block text-sm font-medium text-stone-700 mb-1">Confirm password</label>
+          <input id="confirm-password" type="password" required minlength="8" autocomplete="new-password"
+                 class="focus-ring w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+        </div>
+
+        <div id="set-password-error" hidden class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3"></div>
+
+        <button id="set-password-submit" type="submit"
+                class="focus-ring w-full rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium px-4 py-2.5 text-sm transition-colors">
+          Save password and continue
+        </button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ====================================================================
+       MAIN APP SHELL (shown after login)
+       ==================================================================== -->
+  <div id="app-shell" hidden class="min-h-screen flex">
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed lg:static z-30 inset-y-0 left-0 w-72 bg-white border-r border-stone-200 flex flex-col">
+      <div class="px-5 py-5 border-b border-stone-200">
+        <div class="text-base font-bold text-brand-500">HymnDesk Control</div>
+        <div class="text-xs text-stone-500 mt-0.5">Internal management</div>
+      </div>
+
+      <nav id="sidebar-nav" class="flex-1 overflow-y-auto px-3 py-4 space-y-1 text-sm">
+        <!-- Module links rendered by app.js -->
+      </nav>
+
+      <div class="px-3 py-3 border-t border-stone-200">
+        <div class="px-2 py-2">
+          <div id="user-name" class="text-sm font-medium text-stone-900 truncate"></div>
+          <div id="user-role" class="text-xs text-stone-500 truncate"></div>
+        </div>
+        <button id="sign-out-btn"
+                class="focus-ring w-full text-left rounded-lg px-3 py-2 text-sm text-stone-700 hover:bg-stone-100 transition-colors">
+          Sign out
+        </button>
+      </div>
+    </aside>
+
+    <!-- Sidebar backdrop (mobile only) -->
+    <div id="sidebar-backdrop" hidden class="fixed inset-0 z-20 bg-stone-900/40 lg:hidden"></div>
+
+    <!-- Main content -->
+    <div class="flex-1 flex flex-col min-w-0">
+
+      <!-- Top bar -->
+      <header class="sticky top-0 z-10 bg-white border-b border-stone-200">
+        <div class="flex items-center justify-between px-4 lg:px-8 py-3">
+          <div class="flex items-center gap-3">
+            <button id="sidebar-toggle"
+                    class="lg:hidden focus-ring p-2 -ml-2 rounded-lg hover:bg-stone-100"
+                    aria-label="Open menu">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
+            <h1 id="page-title" class="text-base lg:text-lg font-semibold text-stone-900">Home</h1>
+          </div>
+          <div class="text-xs text-stone-500">
+            <span id="app-version"></span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Page content -->
+      <main id="page-content" class="flex-1 px-4 lg:px-8 py-6 lg:py-8 max-w-5xl w-full">
+        <!-- Rendered by app.js -->
+      </main>
+
+    </div>
+  </div>
+
+
+  <!-- ====================================================================
+       Scripts
+       ==================================================================== -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js"></script>
+  <script src="/js/config.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
