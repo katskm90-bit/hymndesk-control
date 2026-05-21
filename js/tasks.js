@@ -58,13 +58,15 @@
     const { data: prof } = await supabase.from('users').select('role:roles(name)').eq('id', user.id).maybeSingle();
     myRole = prof?.role?.name || null;
 
+    const projectId = window.HD_Project ? window.HD_Project.getId() : null;
     const [tRes, mRes, phRes, catRes, prRes, stRes] = await Promise.all([
       supabase.rpc('list_tasks', {
         p_phase_id: filterPhase || null, p_owner_id: filterOwner || null,
         p_status: filterStatus || null, p_priority: filterPriority || null,
+        p_project_id: projectId,
       }),
       supabase.from('users').select('id, full_name').eq('is_active', true).order('full_name'),
-      supabase.rpc('list_phases'),
+      supabase.rpc('list_phases', { p_project_id: projectId }),
       supabase.from('lookups').select('id, value, sort_order').eq('domain','task_category').eq('is_active',true).order('sort_order'),
       supabase.from('lookups').select('id, value, sort_order').eq('domain','task_priority').eq('is_active',true).order('sort_order'),
       supabase.from('lookups').select('id, value, sort_order').eq('domain','task_status').eq('is_active',true).order('sort_order'),
@@ -351,6 +353,7 @@
       if (!fTitle.value.trim()) { errBox.textContent = 'Title required'; errBox.hidden = false; return; }
       submitBtn.disabled = true; submitBtn.textContent = 'Saving...';
       try {
+        const projectId = window.HD_Project ? window.HD_Project.getId() : null;
         const { error } = await supabase.rpc('upsert_task', {
           p_id: existing?.id || null,
           p_title: fTitle.value.trim(),
@@ -365,6 +368,7 @@
           p_notes:              fNotes.value.trim() || null,
           p_is_critical:        !!fCrit.checked,
           p_is_blocked:         !!fBlk.checked,
+          p_project_id:         projectId,
         });
         if (error) throw error;
         toast(isEdit ? 'Task saved' : 'Task created', 'success');
