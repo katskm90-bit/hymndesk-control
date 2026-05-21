@@ -364,32 +364,30 @@
 
   function renderModulePlaceholder(mod) {
     const main = $('page-content');
+
+    // Module 2 — My Dashboard (lives at #/home)
+    if (mod.id === 'home' && window.HD_Dashboard) {
+      main.innerHTML = '';
+      window.HD_Dashboard.render(main, {
+        supabase: state.supabase,
+        profile:  state.profile,
+        role:     state.role,
+      });
+      return;
+    }
+
+    // Fallback home (if dashboard module not loaded for any reason)
     if (mod.id === 'home') {
       main.innerHTML = `
         <section class="bg-white rounded-2xl border border-stone-200 p-6 lg:p-8 shadow-sm">
           <div class="text-sm text-brand-600 font-medium mb-2">Welcome</div>
           <h2 class="text-xl lg:text-2xl font-bold text-stone-900">${escapeHtml(state.profile.full_name || state.profile.email)}</h2>
           <p class="text-sm text-stone-600 mt-2">You are signed in as <span class="font-medium text-stone-900">${escapeHtml(state.role.name)}</span>.</p>
-          <p class="text-sm text-stone-500 mt-4">${escapeHtml(state.role.description || '')}</p>
-        </section>
-        <section class="mt-6">
-          <h3 class="text-sm font-semibold text-stone-500 uppercase tracking-wide mb-3">Your modules</h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            ${MODULES.filter((m) => m.id !== 'home' && (!m.roles || m.roles.includes(state.role.name))).map((m) => `
-              <a href="#/${m.id}" class="block bg-white rounded-xl border border-stone-200 hover:border-brand-300 hover:shadow-sm p-4 transition-all">
-                <div class="flex items-center gap-3">
-                  <span class="text-brand-500">${ICONS[m.icon] || ICONS.home}</span>
-                  <div class="text-sm font-medium text-stone-900">${escapeHtml(m.title)}</div>
-                </div>
-              </a>
-            `).join('')}
-          </div>
-        </section>
-      `;
+        </section>`;
       return;
     }
 
-    // Module 6 — Team Register (Microsoft 365 style admin centre)
+    // Module 6 — Team Register
     if (mod.id === 'team' && window.HD_Team) {
       main.innerHTML = '';
       const edgeUrl = window.HD_CONFIG.SUPABASE_URL.replace(/\/$/, '') + '/functions/v1/team-admin';
@@ -397,11 +395,32 @@
       return;
     }
 
+    // Module 4 — Project Phases
+    if (mod.id === 'phases' && window.HD_Phases) {
+      main.innerHTML = '';
+      window.HD_Phases.render(main, { supabase: state.supabase });
+      return;
+    }
+
+    // Module 3 — Master Task Tracker
+    if (mod.id === 'tasks' && window.HD_Tasks) {
+      main.innerHTML = '';
+      window.HD_Tasks.render(main, { supabase: state.supabase });
+      return;
+    }
+
+    // Module 5 — Production Schedule
+    if (mod.id === 'sessions' && window.HD_Sessions) {
+      main.innerHTML = '';
+      window.HD_Sessions.render(main, { supabase: state.supabase });
+      return;
+    }
+
     main.innerHTML = `
       <section class="bg-white rounded-2xl border border-stone-200 p-6 lg:p-8 shadow-sm">
         <h2 class="text-xl lg:text-2xl font-bold text-stone-900">${escapeHtml(mod.title)}</h2>
         <p class="text-sm text-stone-600 mt-2">This module is part of the project plan but has not been built yet.</p>
-        <p class="text-sm text-stone-500 mt-4">The skeleton is now wired end to end. We will build this module in the order agreed in the brief.</p>
+        <p class="text-sm text-stone-500 mt-4">We will build this module in the order agreed in the brief.</p>
       </section>
     `;
   }
