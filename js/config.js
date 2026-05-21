@@ -10,5 +10,5 @@
 window.HD_CONFIG = {
   SUPABASE_URL:  'https://ehhpdpmzhrpgbgjnlkwu.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoaHBkcG16aHJwZ2Jnam5sa3d1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyODg3NDAsImV4cCI6MjA5NDg2NDc0MH0.qghKdNGA4gccqenSCKUgY7VAyT9hHVgk-7yOpbZjzf8',
-  APP_VERSION: 'v0.1.0-skeleton'
+  APP_VERSION: 'v0.2.0-team-register'
 };
