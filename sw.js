@@ -1,19 +1,21 @@
 // ============================================================================
 // HymnDesk Control · Service Worker
 // ----------------------------------------------------------------------------
-// Silent update pattern: bump CACHE_VERSION on every deploy. The new worker
-// activates immediately, deletes old caches, and re-fetches index.html on next
-// navigation. Users never see a stale screen and never see an "Update" prompt.
+// Silent update pattern: bump CACHE_VERSION on every deploy.
 // ============================================================================
 
-const CACHE_VERSION = 'hdctl-v0.2.0';
+const CACHE_VERSION = 'hdctl-v0.3.0';
 const CORE_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/js/config.js',
   '/js/app.js',
-  '/js/team.js'
+  '/js/team.js',
+  '/js/phases.js',
+  '/js/tasks.js',
+  '/js/sessions.js',
+  '/js/dashboard.js'
 ];
 
 self.addEventListener('install', (event) => {
@@ -31,7 +33,6 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Network-first for HTML and JS (so deploys propagate fast); cache-first for everything else.
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
