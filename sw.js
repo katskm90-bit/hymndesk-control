@@ -6,13 +6,14 @@
 // navigation. Users never see a stale screen and never see an "Update" prompt.
 // ============================================================================
 
-const CACHE_VERSION = 'hdctl-v0.1.0';
+const CACHE_VERSION = 'hdctl-v0.2.0';
 const CORE_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/js/config.js',
-  '/js/app.js'
+  '/js/app.js',
+  '/js/team.js'
 ];
 
 self.addEventListener('install', (event) => {
