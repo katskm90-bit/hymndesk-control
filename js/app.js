@@ -21,6 +21,7 @@
     { id: 'tasks',        title: 'Master Task Tracker',         icon: 'list',    roles: null },
     { id: 'phases',       title: 'Project Phases',              icon: 'flag',    roles: null },
     { id: 'sessions',     title: 'Production Schedule',         icon: 'film',    roles: null },
+    { id: 'hymns',        title: 'Hymns Catalogue',             icon: 'music',   roles: null },
     { id: 'team',         title: 'Team Register',               icon: 'users',   roles: null },
     { id: 'royalty',      title: 'Royalty Framework',           icon: 'coins',   roles: ['Admin','Finance','Project Manager','Talent'] },
     { id: 'expenses',     title: 'Member Expenses',             icon: 'receipt', roles: null },
@@ -53,7 +54,8 @@
     code:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
     shield:    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-0.5-8-4-8-9V6l8-3z"/></svg>',
     'file-text':'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9l-6-6z"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>',
-    calendar:  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg>'
+    calendar:  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg>',
+    music:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
   };
 
   // ----- State ---------------------------------------------------------------
@@ -287,6 +289,11 @@
       state.profile = profile;
       state.role = role || { name: 'Unknown', description: '', default_permissions: {} };
 
+      // Initialize the active project (loads list, picks a default if none set)
+      if (window.HD_Project) {
+        await window.HD_Project.init(state.supabase);
+      }
+
       renderApp();
     } catch (err) {
       console.error('Profile load failed', err);
@@ -306,8 +313,53 @@
     $('user-name').textContent = state.profile.full_name || state.profile.email;
     $('user-role').textContent = state.role.name;
 
+    renderProjectPicker();
     renderSidebar();
+
+    // Re-render the current page whenever the active project changes
+    if (window.HD_Project && !state._projectListenerWired) {
+      window.HD_Project.onChange(() => {
+        renderProjectPicker();
+        handleRouteChange();
+      });
+      state._projectListenerWired = true;
+    }
+
     handleRouteChange();
+  }
+
+  function renderProjectPicker() {
+    const host = $('project-picker');
+    if (!host || !window.HD_Project) return;
+    const list = window.HD_Project.all();
+    const current = window.HD_Project.current();
+    if (!list || list.length === 0) { host.innerHTML = ''; return; }
+
+    if (list.length === 1) {
+      // Show as a static badge — no need for a picker
+      host.innerHTML = `<span class="inline-flex items-center gap-1.5 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-full px-2.5 py-1" title="Active project">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>
+        <span class="hidden sm:inline">${escapeHtml(current?.name || 'Project')}</span>
+        <span class="sm:hidden">${escapeHtml(current?.code || 'project')}</span>
+      </span>`;
+      return;
+    }
+
+    // Multiple projects: render a select
+    const sel = document.createElement('select');
+    sel.className = 'text-xs rounded-lg border border-stone-300 bg-white px-2 py-1 max-w-[200px]';
+    list.forEach((p) => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      if (p.id === current?.id) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', (e) => {
+      window.HD_Project.setId(e.target.value);
+    });
+    host.innerHTML = '';
+    host.appendChild(sel);
   }
 
   function renderSidebar() {
@@ -413,6 +465,13 @@
     if (mod.id === 'sessions' && window.HD_Sessions) {
       main.innerHTML = '';
       window.HD_Sessions.render(main, { supabase: state.supabase });
+      return;
+    }
+
+    // Hymns Catalogue
+    if (mod.id === 'hymns' && window.HD_Hymns) {
+      main.innerHTML = '';
+      window.HD_Hymns.render(main, { supabase: state.supabase });
       return;
     }
 
