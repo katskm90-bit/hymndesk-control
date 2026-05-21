@@ -389,6 +389,14 @@
       return;
     }
 
+    // Module 6 — Team Register (Microsoft 365 style admin centre)
+    if (mod.id === 'team' && window.HD_Team) {
+      main.innerHTML = '';
+      const edgeUrl = window.HD_CONFIG.SUPABASE_URL.replace(/\/$/, '') + '/functions/v1/team-admin';
+      window.HD_Team.render(main, { supabase: state.supabase, edgeUrl });
+      return;
+    }
+
     main.innerHTML = `
       <section class="bg-white rounded-2xl border border-stone-200 p-6 lg:p-8 shadow-sm">
         <h2 class="text-xl lg:text-2xl font-bold text-stone-900">${escapeHtml(mod.title)}</h2>
