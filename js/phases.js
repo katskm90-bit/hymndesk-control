@@ -42,7 +42,8 @@
     const { data: { user } } = await supabase.auth.getUser();
     const { data: prof } = await supabase.from('users').select('role:roles(name)').eq('id', user.id).maybeSingle();
     myRole = prof?.role?.name || null;
-    const { data, error } = await supabase.rpc('list_phases');
+    const projectId = window.HD_Project ? window.HD_Project.getId() : null;
+    const { data, error } = await supabase.rpc('list_phases', { p_project_id: projectId });
     if (error) throw error;
     phases = data || [];
   }
@@ -160,6 +161,7 @@
       if (!fName.value.trim()) { errBox.textContent = 'Phase name required'; errBox.hidden = false; return; }
       submitBtn.disabled = true; submitBtn.textContent = 'Saving...';
       try {
+        const projectId = window.HD_Project ? window.HD_Project.getId() : null;
         const { error } = await supabase.rpc('upsert_phase', {
           p_id: existing?.id || null,
           p_name: fName.value.trim(),
@@ -168,6 +170,7 @@
           p_end_date: fEnd.value || null,
           p_key_deliverables: fDel.value.trim() || null,
           p_sort_order: fOrder.value ? Number(fOrder.value) : null,
+          p_project_id: projectId,
         });
         if (error) throw error;
         toast(isEdit ? 'Phase updated' : 'Phase added', 'success');
