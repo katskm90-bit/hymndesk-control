@@ -45,8 +45,9 @@
     const { data: { user } } = await supabase.auth.getUser();
     const { data: prof } = await supabase.from('users').select('role:roles(name)').eq('id', user.id).maybeSingle();
     myRole = prof?.role?.name || null;
+    const projectId = window.HD_Project ? window.HD_Project.getId() : null;
     const [sRes, mRes, stRes] = await Promise.all([
-      supabase.rpc('list_sessions'),
+      supabase.rpc('list_sessions', { p_project_id: projectId }),
       supabase.from('users').select('id, full_name').eq('is_active', true).order('full_name'),
       supabase.from('lookups').select('id, value, sort_order').eq('domain','workflow_state').eq('is_active',true).order('sort_order'),
     ]);
@@ -181,6 +182,7 @@
       if (!fName.value.trim()) { errBox.textContent = 'Session name required'; errBox.hidden = false; return; }
       submitBtn.disabled = true; submitBtn.textContent = 'Saving...';
       try {
+        const projectId = window.HD_Project ? window.HD_Project.getId() : null;
         const { error } = await supabase.rpc('upsert_session', {
           p_id: existing?.id || null,
           p_session_number: fNum.value === '' ? null : Number(fNum.value),
@@ -196,6 +198,7 @@
           p_status_lookup_id: fStatus.value || null,
           p_notes:          fNotes.value.trim() || null,
           p_sort_order:     existing?.sort_order ?? sessions.length + 1,
+          p_project_id:     projectId,
         });
         if (error) throw error;
         toast(isEdit ? 'Session saved' : 'Session created', 'success');
@@ -255,14 +258,60 @@
     };
     function renderTabs() {
       tabs.innerHTML = '';
-      tabs.append(tabButton('call_sheet','Call sheet'), tabButton('equipment','Equipment'), tabButton('attendance','Attendance'));
+      tabs.append(
+        tabButton('call_sheet','Call sheet'),
+        tabButton('hymns','Hymns'),
+        tabButton('equipment','Equipment'),
+        tabButton('attendance','Attendance'),
+      );
       body.innerHTML = '<div class="text-sm text-stone-500">Loading...</div>';
       if (activeTab === 'call_sheet') renderCallSheet(s, body);
+      else if (activeTab === 'hymns') renderSessionHymns(s, body);
       else if (activeTab === 'equipment') renderEquipment(s, body);
       else renderAttendance(s, body);
     }
     renderTabs();
     document.body.appendChild(overlay);
+  }
+
+  async function renderSessionHymns(s, body) {
+    const projectId = window.HD_Project ? window.HD_Project.getId() : null;
+    const { data, error } = await supabase.rpc('list_hymns', {
+      p_book_id: null, p_language_id: null, p_search: null,
+      p_project_id: projectId, p_session_id: s.id, p_status: null,
+      p_limit: 1000, p_offset: 0,
+    });
+    if (error) { body.innerHTML = ''; body.appendChild(el('div', { class: 'text-sm text-red-600' }, error.message)); return; }
+    body.innerHTML = '';
+    const items = data || [];
+
+    if (items.length === 0) {
+      body.appendChild(el('div', { class: 'text-sm text-stone-500 text-center py-6' },
+        'No hymns linked to this session yet.'));
+    } else {
+      const list = el('div', { class: 'border border-stone-200 rounded-xl divide-y divide-stone-100' });
+      items.forEach(h => {
+        list.appendChild(el('div', { class: 'flex items-center gap-3 px-3 py-2 text-sm' },
+          el('div', { class: 'w-10 text-stone-500 font-medium text-xs' }, h.hymn_number != null ? '#' + h.hymn_number : '—'),
+          el('div', { class: 'flex-1 min-w-0' },
+            el('div', { class: 'text-stone-900 truncate' }, h.hymn_title || '—'),
+            el('div', { class: 'text-xs text-stone-500' },
+              [h.recording_status, h.book_name].filter(Boolean).join(' · ') || 'Not recorded'),
+          ),
+          h.recording_youtube_url
+            ? el('a', { href: h.recording_youtube_url, target: '_blank', class: 'text-xs text-brand-600 hover:text-brand-700' }, 'YouTube')
+            : null,
+        ));
+      });
+      body.appendChild(list);
+    }
+
+    body.appendChild(el('div', { class: 'mt-4 text-center text-sm text-stone-500' },
+      'Link a hymn to this session from the ',
+      el('a', { href: '#/hymns', onclick: () => document.querySelector('.fixed.inset-0.z-40')?.remove(),
+                class: 'text-brand-600 hover:text-brand-700' }, 'Hymns Catalogue'),
+      '.',
+    ));
   }
 
   async function renderCallSheet(s, body) {
