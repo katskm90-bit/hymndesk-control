@@ -44,7 +44,8 @@
     container.innerHTML = '<div class="text-sm text-stone-500">Loading dashboard...</div>';
 
     try {
-      const { data, error } = await supabase.rpc('my_dashboard');
+      const projectId = window.HD_Project ? window.HD_Project.getId() : null;
+      const { data, error } = await supabase.rpc('my_dashboard', { p_project_id: projectId });
       if (error) throw error;
 
       container.innerHTML = '';
