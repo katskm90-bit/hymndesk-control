@@ -538,6 +538,27 @@
       return;
     }
 
+    // Module 1 — Founder and Admin Dashboard
+    if (mod.id === 'admin-dash' && window.HD_Founder) {
+      main.innerHTML = '';
+      window.HD_Founder.render(main, { supabase: state.supabase });
+      return;
+    }
+
+    // Module 15 — Risk Register
+    if (mod.id === 'risks' && window.HD_Risks) {
+      main.innerHTML = '';
+      window.HD_Risks.render(main, { supabase: state.supabase });
+      return;
+    }
+
+    // Module 17 — Annual AGM and Audit Log
+    if (mod.id === 'agm' && window.HD_AGM) {
+      main.innerHTML = '';
+      window.HD_AGM.render(main, { supabase: state.supabase });
+      return;
+    }
+
     main.innerHTML = `
       <section class="bg-white rounded-2xl border border-stone-200 p-6 lg:p-8 shadow-sm">
         <h2 class="text-xl lg:text-2xl font-bold text-stone-900">${escapeHtml(mod.title)}</h2>
