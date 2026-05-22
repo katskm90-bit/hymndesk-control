@@ -510,6 +510,34 @@
       return;
     }
 
+    // Module 11 — Sponsorship Pipeline
+    if (mod.id === 'sponsorship' && window.HD_Sponsorship) {
+      main.innerHTML = '';
+      window.HD_Sponsorship.render(main, { supabase: state.supabase });
+      return;
+    }
+
+    // Module 12 — Marketing and YouTube
+    if (mod.id === 'marketing' && window.HD_Marketing) {
+      main.innerHTML = '';
+      window.HD_Marketing.render(main, { supabase: state.supabase });
+      return;
+    }
+
+    // Module 13 — Beta Testing
+    if (mod.id === 'beta' && window.HD_Beta) {
+      main.innerHTML = '';
+      window.HD_Beta.render(main, { supabase: state.supabase });
+      return;
+    }
+
+    // Module 14 — App Development Roadmap
+    if (mod.id === 'app-dev' && window.HD_AppDev) {
+      main.innerHTML = '';
+      window.HD_AppDev.render(main, { supabase: state.supabase });
+      return;
+    }
+
     main.innerHTML = `
       <section class="bg-white rounded-2xl border border-stone-200 p-6 lg:p-8 shadow-sm">
         <h2 class="text-xl lg:text-2xl font-bold text-stone-900">${escapeHtml(mod.title)}</h2>
