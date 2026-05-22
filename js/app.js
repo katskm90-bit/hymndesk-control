@@ -475,6 +475,27 @@
       return;
     }
 
+    // Module 9 — Budget Tracker
+    if (mod.id === 'budget' && window.HD_Budget) {
+      main.innerHTML = '';
+      window.HD_Budget.render(main, { supabase: state.supabase });
+      return;
+    }
+
+    // Module 10 — Income Streams
+    if (mod.id === 'income' && window.HD_Income) {
+      main.innerHTML = '';
+      window.HD_Income.render(main, { supabase: state.supabase });
+      return;
+    }
+
+    // Module 8 — Member Expenses
+    if (mod.id === 'expenses' && window.HD_Expenses) {
+      main.innerHTML = '';
+      window.HD_Expenses.render(main, { supabase: state.supabase });
+      return;
+    }
+
     main.innerHTML = `
       <section class="bg-white rounded-2xl border border-stone-200 p-6 lg:p-8 shadow-sm">
         <h2 class="text-xl lg:text-2xl font-bold text-stone-900">${escapeHtml(mod.title)}</h2>
