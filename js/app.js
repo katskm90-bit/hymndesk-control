@@ -496,6 +496,20 @@
       return;
     }
 
+    // Module 7 — Royalty Framework
+    if (mod.id === 'royalty' && window.HD_Royalty) {
+      main.innerHTML = '';
+      window.HD_Royalty.render(main, { supabase: state.supabase });
+      return;
+    }
+
+    // Module 16 — Payment Advices and Statements
+    if (mod.id === 'advices' && window.HD_Advices) {
+      main.innerHTML = '';
+      window.HD_Advices.render(main, { supabase: state.supabase });
+      return;
+    }
+
     main.innerHTML = `
       <section class="bg-white rounded-2xl border border-stone-200 p-6 lg:p-8 shadow-sm">
         <h2 class="text-xl lg:text-2xl font-bold text-stone-900">${escapeHtml(mod.title)}</h2>
