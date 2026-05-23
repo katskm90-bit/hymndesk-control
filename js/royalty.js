@@ -477,7 +477,10 @@
       h1{font-size:20px;margin:0 0 4px} .muted{color:#78716c;font-size:13px;margin:0 0 20px}
       table{width:100%;border-collapse:collapse;font-size:14px} .total{border-top:2px solid #e7e5e4;font-weight:700;font-size:16px}
       .total td{padding-top:12px}</style></head><body>
-      <h1>Royalty statement</h1>
+      <div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid #e7e5e4;padding-bottom:14px;margin-bottom:18px">
+        <img src="https://control.hymndesk.co.za/icons/icon-192x192.png" alt="" style="width:44px;height:44px;border-radius:10px" />
+        <div><div style="font-size:18px;font-weight:700">Royalty statement</div><div class="muted" style="margin:0">HymnDesk Control</div></div>
+      </div>
       <p class="muted">${esc(st.user_name)} · period ${st.period_start ? esc(st.period_start) + ' to ' : 'up to '}${esc(st.period_end || '')}</p>
       <table>
         ${row('Royalty percent', Number(st.user_percentage).toFixed(2) + ' percent')}
