@@ -18,6 +18,7 @@
   const MODULES = [
     { id: 'home',         title: 'Home',                       icon: 'home',    roles: null },
     { id: 'admin-dash',   title: 'Founder and Admin Dashboard', icon: 'gauge',   roles: ['Admin','Project Manager'] },
+    { id: 'mytasks',      title: 'My Tasks',                    icon: 'check',   roles: null },
     { id: 'tasks',        title: 'Master Task Tracker',         icon: 'list',    roles: null },
     { id: 'phases',       title: 'Project Phases',              icon: 'flag',    roles: null },
     { id: 'sessions',     title: 'Production Schedule',         icon: 'film',    roles: null },
@@ -41,6 +42,7 @@
     home:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg>',
     gauge:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 13l4-4"/></svg>',
     list:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>',
+    check:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
     flag:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21V4h12l-2 4 2 4H4"/></svg>',
     film:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/><line x1="3" y1="12" x2="21" y2="12"/></svg>',
     users:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><circle cx="17" cy="8" r="2"/><path d="M21 20c0-2-1.5-3.5-4-4"/></svg>',
@@ -490,6 +492,13 @@
     if (mod.id === 'phases' && window.HD_Phases) {
       main.innerHTML = '';
       window.HD_Phases.render(main, { supabase: state.supabase });
+      return;
+    }
+
+    // My Tasks — member view of their assigned tasks
+    if (mod.id === 'mytasks' && window.HD_MyTasks) {
+      main.innerHTML = '';
+      window.HD_MyTasks.render(main, { supabase: state.supabase });
       return;
     }
 
