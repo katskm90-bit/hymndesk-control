@@ -190,16 +190,29 @@
       return wrap;
     }
 
+    // For a member, surface any contract awaiting their signature at the top
+    const myPending = contracts.filter(c => c.user_id === myUserId && c.status !== 'Signed');
+    if (!isPmOrAdmin() && myPending.length > 0) {
+      const banner = el('div', { class:'bg-brand-50 border-2 border-brand-200 rounded-xl p-4 flex items-center justify-between gap-3' },
+        el('div', null,
+          el('div', { class:'font-semibold text-stone-900' }, myPending.length === 1 ? 'You have a contract to sign' : `You have ${myPending.length} contracts to sign`),
+          el('div', { class:'text-xs text-stone-600 mt-0.5' }, 'Open it to review and sign.')),
+        el('button', { class:'bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg shrink-0',
+          onclick: () => openContract(myPending[0].id) }, 'Review and sign'));
+      wrap.appendChild(banner);
+    }
+
     const list = el('div', { class:'space-y-2' });
     contracts.forEach(c => {
-      list.appendChild(el('div', { class:'bg-white border border-stone-200 rounded-xl p-4 flex items-center justify-between gap-3' },
+      const awaitingMe = c.user_id === myUserId && c.status !== 'Signed';
+      list.appendChild(el('div', { class:`bg-white border rounded-xl p-4 flex items-center justify-between gap-3 ${awaitingMe ? 'border-brand-300' : 'border-stone-200'}` },
         el('div', { class:'min-w-0' },
           el('div', { class:'font-medium text-stone-900 truncate' }, c.full_name),
           el('div', { class:'text-xs text-stone-500 mt-0.5' }, `${c.role_name} · drafted ${fmtDate(c.created_at)}` + (c.signed_at ? ` · signed ${fmtDate(c.signed_at)}` : '')),
         ),
         el('div', { class:'flex items-center gap-3 shrink-0' },
           statusPill(c.status),
-          el('button', { class:'text-xs text-brand-600 hover:text-brand-700', onclick: () => openContract(c.id) }, 'Open'),
+          el('button', { class:'text-xs text-brand-600 hover:text-brand-700', onclick: () => openContract(c.id) }, awaitingMe ? 'Review and sign' : 'Open'),
         ),
       ));
     });
@@ -413,6 +426,75 @@
 
     const body = el('div', { class:'flex-1 overflow-y-auto p-5' });
     body.appendChild(renderContractPreview(c));
+
+    // Signing area: shown to the member named on the contract when it is not
+    // yet signed. Both tick boxes are required before the Sign button activates.
+    const isMine = c.user_id === myUserId;
+    if (isMine && c.status !== 'Signed') {
+      const signBox = el('div', { class:'mt-5 border-2 border-brand-200 bg-brand-50 rounded-xl p-4 space-y-3' });
+      signBox.appendChild(el('div', { class:'font-semibold text-stone-900' }, 'Sign this contract'));
+      signBox.appendChild(el('div', { class:'text-xs text-stone-600' },
+        'Signing electronically has the same legal effect as a handwritten signature, under the Electronic Communications and Transactions Act 25 of 2002. Your full name, the place, and the date and time are recorded.'));
+
+      const fSignName = el('input', { type:'text', class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', placeholder:'Type your full name', value: c.full_name || '' });
+      const fSignPlace = el('input', { type:'text', class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', placeholder:'e.g. Johannesburg' });
+      const tickAgree = el('input', { type:'checkbox', class:'rounded mt-0.5' });
+      const tickNda = el('input', { type:'checkbox', class:'rounded mt-0.5' });
+      const signBtn = el('button', { class:'w-full px-4 py-2.5 text-sm rounded-lg bg-stone-300 text-stone-500 font-medium cursor-not-allowed', disabled:'' }, 'Sign contract');
+      const signErr = el('div', { class:'text-sm text-red-600', hidden:'' });
+
+      function refreshSignState() {
+        const ok = tickAgree.checked && tickNda.checked && fSignName.value.trim() && fSignPlace.value.trim();
+        signBtn.disabled = !ok;
+        signBtn.className = ok
+          ? 'w-full px-4 py-2.5 text-sm rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium'
+          : 'w-full px-4 py-2.5 text-sm rounded-lg bg-stone-300 text-stone-500 font-medium cursor-not-allowed';
+      }
+      [tickAgree, tickNda].forEach(t => t.addEventListener('change', refreshSignState));
+      [fSignName, fSignPlace].forEach(f => f.addEventListener('input', refreshSignState));
+
+      signBox.append(
+        lab('Full name', fSignName),
+        lab('Place of signing', fSignPlace),
+        el('label', { class:'flex items-start gap-2 text-sm text-stone-700' }, tickAgree,
+          el('span', null, 'I have read and agree to be bound by this Independent Contractor Agreement.')),
+        el('label', { class:'flex items-start gap-2 text-sm text-stone-700' }, tickNda,
+          el('span', null, 'I have read and agree to the Non Disclosure Agreement at Annexure B.')),
+        signErr,
+        signBtn,
+      );
+
+      signBtn.addEventListener('click', async () => {
+        if (signBtn.disabled) return;
+        signErr.hidden = true; signBtn.disabled = true; signBtn.textContent = 'Signing...';
+        try {
+          // Snapshot exactly what they agreed to: the stored body plus the agreed terms
+          const snapshot = {
+            contract_body: c.contract_body,
+            annexure_expenses: c.annexure_expenses,
+            contribution_percent: c.contribution_percent,
+            incentive_percent: c.incentive_percent,
+            session_rate: c.session_rate,
+            role_name: c.role_name,
+            agreed_contract: true,
+            agreed_nda: true,
+          };
+          const { error } = await supabase.rpc('sign_contract', {
+            p_contract_id: c.id,
+            p_signed_name: fSignName.value.trim(),
+            p_signed_place: fSignPlace.value.trim(),
+            p_signed_snapshot: snapshot,
+          });
+          if (error) throw error;
+          toast('Contract signed', 'success');
+          overlay.remove(); reload();
+        } catch (err) { signErr.textContent = err.message || 'Could not sign'; signErr.hidden = false;
+          signBtn.disabled = false; signBtn.textContent = 'Sign contract'; refreshSignState(); }
+      });
+
+      body.appendChild(signBox);
+    }
+
     dialog.appendChild(body);
 
     const footer = el('div', { class:'px-5 py-4 border-t border-stone-200 flex items-center justify-end gap-2 flex-wrap' });
