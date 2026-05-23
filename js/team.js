@@ -386,7 +386,7 @@
     );
 
     const fEmail = el('input', { type: 'email', required: '', autocomplete: 'off',
-      class: 'focus-ring w-full rounded-lg border border-stone-300 px-3 py-2 text-sm',
+      class: 'focus-ring w-full rounded-lg border border-stone-300 px-3 py-2 text-sm' + (isEdit ? ' bg-stone-100 text-stone-500 cursor-not-allowed' : ''),
       value: existing?.email || '',
       disabled: isEdit ? '' : null,
     });
@@ -426,7 +426,7 @@
 
     body.append(
       el('div', { class: 'grid grid-cols-1 sm:grid-cols-2 gap-4' },
-        fld('Email', fEmail, isEdit ? 'Email cannot be changed after creation.' : 'A login account is created at this email but no email is sent until you invite them.'),
+        fld('Email', fEmail, isEdit ? 'The login email is fixed once a member is created. To move someone to a new email, deactivate this record and create a new one.' : 'A login account is created at this email but no email is sent until you invite them.'),
         fld('Full name', fFullName),
       ),
       el('div', { class: 'grid grid-cols-1 sm:grid-cols-2 gap-4' },
