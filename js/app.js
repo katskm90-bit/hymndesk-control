@@ -336,12 +336,16 @@
     if (!list || list.length === 0) { host.innerHTML = ''; return; }
 
     if (list.length === 1) {
-      // Show as a static badge — no need for a picker
-      host.innerHTML = `<span class="inline-flex items-center gap-1.5 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-full px-2.5 py-1" title="Active project">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>
+      const isAdmin = state.role && state.role.name === 'Admin';
+      host.innerHTML = '';
+      const badge = document.createElement('span');
+      badge.className = 'inline-flex items-center gap-1.5 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-full px-2.5 py-1' + (isAdmin ? ' cursor-pointer hover:bg-brand-100' : '');
+      badge.title = isAdmin ? 'Click to rename this project' : 'Active project';
+      badge.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>
         <span class="hidden sm:inline">${escapeHtml(current?.name || 'Project')}</span>
-        <span class="sm:hidden">${escapeHtml(current?.code || 'project')}</span>
-      </span>`;
+        <span class="sm:hidden">${escapeHtml(current?.code || 'project')}</span>`;
+      if (isAdmin) badge.addEventListener('click', () => openRenameProject(current));
+      host.appendChild(badge);
       return;
     }
 
@@ -360,6 +364,41 @@
     });
     host.innerHTML = '';
     host.appendChild(sel);
+  }
+
+  async function openRenameProject(current) {
+    if (!current) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 z-50 bg-stone-900/50 flex items-center justify-center p-4';
+    const dlg = document.createElement('div');
+    dlg.className = 'bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 space-y-3';
+    dlg.innerHTML = `
+      <h3 class="text-base font-semibold text-stone-900">Rename project</h3>
+      <label class="block text-sm font-medium text-stone-700">Project name</label>
+      <input type="text" id="rename-input" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" value="${escapeHtml(current.name || '')}">
+      <div id="rename-err" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3" hidden></div>
+      <div class="flex items-center justify-end gap-2 pt-1">
+        <button id="rename-cancel" class="px-4 py-2 text-sm rounded-lg hover:bg-stone-100">Cancel</button>
+        <button id="rename-save" class="px-4 py-2 text-sm rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium">Save</button>
+      </div>`;
+    overlay.appendChild(dlg);
+    document.body.appendChild(overlay);
+    const input = dlg.querySelector('#rename-input');
+    const err = dlg.querySelector('#rename-err');
+    input.focus();
+    dlg.querySelector('#rename-cancel').addEventListener('click', () => overlay.remove());
+    dlg.querySelector('#rename-save').addEventListener('click', async () => {
+      err.hidden = true;
+      const name = input.value.trim();
+      if (!name) { err.textContent = 'A project name is required.'; err.hidden = false; return; }
+      try {
+        const { error } = await state.supabase.rpc('rename_project', { p_project_id: current.id, p_new_name: name });
+        if (error) throw error;
+        if (window.HD_Project && window.HD_Project.refresh) await window.HD_Project.refresh(state.supabase);
+        overlay.remove();
+        renderProjectPicker();
+      } catch (e) { err.textContent = e.message || 'Could not rename.'; err.hidden = false; }
+    });
   }
 
   function renderSidebar() {
