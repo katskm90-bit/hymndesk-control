@@ -27,6 +27,7 @@
   let forfeitureTypes = ['Full', 'Partial', 'Full or Partial'];
   let members = [];
   let invitations = [];
+  let myRole = null;
   let filterText = '';
   let filterRole = '';
   let filterActive = 'all';   // all | active | inactive | invited
@@ -76,12 +77,14 @@
 
   // ----- Data load ---------------------------------------------------------
   async function loadAll() {
-    const [rRes, csRes, deptRes, mRes, iRes] = await Promise.all([
+    const { data: { user } } = await supabase.auth.getUser();
+    const [rRes, csRes, deptRes, mRes, iRes, pRes] = await Promise.all([
       supabase.from('roles').select('id, name, sort_order').order('sort_order'),
       supabase.from('lookups').select('id, value').eq('domain', 'contract_status').eq('is_active', true).order('sort_order'),
       supabase.from('lookups').select('id, value').eq('domain', 'department').eq('is_active', true).order('sort_order'),
       supabase.rpc('list_team_members'),
       supabase.rpc('list_pending_invitations'),
+      supabase.from('users').select('role:roles(name)').eq('id', user.id).maybeSingle(),
     ]);
     if (rRes.error)   throw rRes.error;
     if (csRes.error)  throw csRes.error;
@@ -93,7 +96,10 @@
     departments      = (deptRes.data || []).map(d => d.value);
     members          = mRes.data || [];
     invitations      = iRes.error ? [] : (iRes.data || []);
+    myRole           = pRes.data?.role?.name || null;
   }
+
+  function canSeeSensitive() { return myRole === 'Admin' || myRole === 'Project Manager'; }
 
 
   // ----- Edge Function call -----------------------------------------------
@@ -326,6 +332,7 @@
     const menu = el('div', { class: 'hd-action-menu absolute z-40 bg-white border border-stone-200 rounded-lg shadow-lg py-1 text-sm min-w-[180px]' });
     const items = [
       { label: 'Edit details',  onclick: () => openMemberDialog(m) },
+      canSeeSensitive() ? { label: 'Medical and emergency', onclick: () => openSensitiveDialog(m) } : null,
       m.confirmed_status === 'Invited'
         ? { label: 'Resend invitation', onclick: () => inviteMember(m) }
         : { label: 'Send invitation',   onclick: () => inviteMember(m) },
@@ -333,7 +340,7 @@
         ? { label: 'Deactivate', onclick: () => setActive(m, false), danger: false }
         : { label: 'Reactivate', onclick: () => setActive(m, true),  danger: false },
       { label: 'Delete', danger: true, onclick: () => deleteMember(m) },
-    ];
+    ].filter(Boolean);
     items.forEach(it => {
       const b = el('button', {
         class: `w-full text-left px-3 py-2 hover:bg-stone-100 ${it.danger ? 'text-red-600' : 'text-stone-700'}`,
@@ -354,6 +361,66 @@
       };
       document.addEventListener('click', close);
     }, 0);
+  }
+
+
+  // ----- Sensitive records dialog (Admin and PM only) ----------------------
+  async function openSensitiveDialog(m) {
+    const overlay = el('div', { class: 'fixed inset-0 z-40 bg-stone-900/50 flex items-end sm:items-center justify-center p-0 sm:p-4' });
+    const dialog  = el('div', { class: 'bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[95vh] flex flex-col' });
+    overlay.appendChild(dialog);
+    dialog.appendChild(el('div', { class: 'px-5 py-4 border-b border-stone-200' },
+      el('h3', { class: 'text-base font-semibold' }, 'Medical and emergency'),
+      el('p', { class: 'text-xs text-stone-500 mt-0.5' }, esc(m.full_name) + ' · visible to Admin and Project Manager only')));
+    const body = el('div', { class: 'flex-1 overflow-y-auto p-5 space-y-3' });
+    body.appendChild(el('div', { class: 'text-sm text-stone-500' }, 'Loading...'));
+    dialog.appendChild(body);
+    document.body.appendChild(overlay);
+
+    let rec = {};
+    try {
+      const { data, error } = await supabase.rpc('get_member_sensitive', { p_user_id: m.id });
+      if (error) throw error;
+      rec = data || {};
+    } catch (err) {
+      body.innerHTML = '';
+      body.appendChild(el('div', { class: 'text-sm text-red-600' }, err.message || 'Could not load'));
+      return;
+    }
+
+    const fMed = el('textarea', { rows: '3', class: 'focus-ring w-full rounded-lg border border-stone-300 px-3 py-2 text-sm',
+      placeholder: 'Allergies, conditions, or anything the team should know in an emergency' }, rec.medical_notes || '');
+    const fKinName = el('input', { type: 'text', class: 'focus-ring w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: rec.next_of_kin_name || '' });
+    const fKinPhone = el('input', { type: 'tel', class: 'focus-ring w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: rec.next_of_kin_phone || '' });
+    const errBox = el('div', { class: 'text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3', hidden: '' });
+
+    body.innerHTML = '';
+    body.append(
+      el('div', null, el('label', { class: 'block text-sm font-medium text-stone-700 mb-1' }, 'Medical notes (basic)'), fMed),
+      el('div', null, el('label', { class: 'block text-sm font-medium text-stone-700 mb-1' }, 'Next of kin name'), fKinName),
+      el('div', null, el('label', { class: 'block text-sm font-medium text-stone-700 mb-1' }, 'Next of kin contact number'), fKinPhone),
+      errBox,
+    );
+
+    const saveBtn = el('button', { class: 'px-4 py-2 text-sm rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium' }, 'Save');
+    saveBtn.addEventListener('click', async () => {
+      errBox.hidden = true; saveBtn.disabled = true; saveBtn.textContent = 'Saving...';
+      try {
+        const { error } = await supabase.rpc('update_member_sensitive', {
+          p_user_id: m.id,
+          p_medical_notes: fMed.value.trim() || null,
+          p_next_of_kin_name: fKinName.value.trim() || null,
+          p_next_of_kin_phone: fKinPhone.value.trim() || null,
+        });
+        if (error) throw error;
+        toast('Saved', 'success'); overlay.remove();
+      } catch (err) { errBox.textContent = err.message || 'Could not save'; errBox.hidden = false; saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+    });
+
+    dialog.appendChild(el('div', { class: 'px-5 py-4 border-t border-stone-200 flex items-center justify-end gap-2' },
+      el('button', { class: 'px-4 py-2 text-sm rounded-lg hover:bg-stone-100', onclick: () => overlay.remove() }, 'Cancel'),
+      saveBtn,
+    ));
   }
 
 
