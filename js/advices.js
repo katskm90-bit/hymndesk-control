@@ -204,7 +204,7 @@
       .total{border-top:2px solid #e7e5e4;font-weight:700;font-size:18px} .total td{padding-top:14px}
       .foot{color:#a8a29e;font-size:12px;margin-top:36px}</style></head><body>
       <div class="top">
-        <div><h1>Payment Advice</h1><p class="sub">HymnDesk Control</p></div>
+        <div style="display:flex;align-items:center;gap:12px"><img src="https://control.hymndesk.co.za/icons/icon-192x192.png" alt="" style="width:48px;height:48px;border-radius:10px" /><div><h1>Payment Advice</h1><p class="sub">HymnDesk Control</p></div></div>
         <div style="text-align:right"><div class="num">${esc(a.advice_number)}</div><div class="sub">Generated ${esc(fmtDate(a.generated_at))}</div></div>
       </div>
       <table>
