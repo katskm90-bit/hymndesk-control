@@ -208,16 +208,17 @@
   }
 
   // ----- Draft flow -------------------------------------------------------
-  function openDraft() {
+  function openDraft(editContract) {
+    const isEditing = !!editContract;
     const overlay = el('div', { class:'fixed inset-0 z-50 bg-stone-900/50 flex items-end sm:items-center justify-center p-0 sm:p-4' });
     const dialog  = el('div', { class:'bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[95vh] flex flex-col' });
     overlay.appendChild(dialog);
     dialog.appendChild(el('div', { class:'px-5 py-4 border-b border-stone-200' },
-      el('h3', { class:'text-base font-semibold' }, 'Draft a contract')));
+      el('h3', { class:'text-base font-semibold' }, isEditing ? 'Edit contract' : 'Draft a contract')));
 
     const body = el('div', { class:'flex-1 overflow-y-auto p-5 space-y-4' });
 
-    const fMember = el('select', { class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white' },
+    const fMember = el('select', { class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white', disabled: isEditing ? '' : null },
       el('option', { value:'' }, 'Select a member'),
       ...members.filter(m => m.is_active).map(m => el('option', { value:m.id }, `${m.full_name} (${m.role?.name || m.role_name || 'No role'})`)));
     const roleLine = el('div', { class:'text-xs text-stone-500' }, '');
@@ -294,46 +295,84 @@
     );
     dialog.appendChild(body);
 
+    // When editing, pre-seed the form from the existing contract and lock the member
+    if (isEditing) {
+      const ec = editContract;
+      selectedMember = members.find(m => m.id === ec.user_id)
+        || { id: ec.user_id, full_name: ec.full_name, role_name: ec.role_name };
+      fMember.value = ec.user_id;
+      roleLine.textContent = `Role: ${ec.role_name}`;
+      fId.value = ec.id_number || '';
+      fStart.value = ec.start_date || '';
+      fEnd.value = ec.end_date || '';
+      fContrib.value = ec.contribution_percent ?? '0';
+      fInc.value = ec.incentive_percent ?? '0';
+      if (ec.session_rate != null) { fRateOn.checked = true; fRate.disabled = false; fRate.value = ec.session_rate; }
+      const duties = responsibilitiesFor(ec.role_name);
+      dutiesBox.innerHTML = '';
+      if (duties.length === 0) dutiesBox.appendChild(el('div', null, 'No responsibilities on file for this role.'));
+      else { dutiesBox.appendChild(el('div', { class:'font-medium text-stone-700 mb-1' }, 'Responsibilities for this role (clause 2.2):'));
+        duties.forEach((d, i) => dutiesBox.appendChild(el('div', null, `(${String.fromCharCode(97+i)}) ${d}`))); }
+      // Seed annexure rows
+      annexureRows.innerHTML = '';
+      const rows = ec.annexure_expenses || [];
+      if (rows.length === 0) addExpenseRow();
+      else rows.forEach(r => addExpenseRow(r.description || '', r.notes || '', r.amount ?? ''));
+    }
+
     const errBox = el('div', { class:'px-5 text-sm text-red-600', hidden:'' });
     dialog.appendChild(errBox);
 
-    const saveBtn = el('button', { class:'px-4 py-2 text-sm rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium' }, 'Generate draft');
+    const saveBtn = el('button', { class:'px-4 py-2 text-sm rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium' }, isEditing ? 'Save changes' : 'Generate draft');
     saveBtn.addEventListener('click', async () => {
       errBox.hidden = true;
       if (!selectedMember) { errBox.textContent = 'Select a member'; errBox.hidden = false; return; }
       const role = selectedMember.role?.name || selectedMember.role_name;
-      saveBtn.disabled = true; saveBtn.textContent = 'Generating...';
+      saveBtn.disabled = true; saveBtn.textContent = 'Saving...';
       try {
         const expenses = Array.from(annexureRows.children).map(r => r._get()).filter(x => x.description);
         const sessionRate = fRateOn.checked ? Number(fRate.value || 0) : null;
-        const body = buildContractBody({
+        const bodyJson = buildContractBody({
           fullName: selectedMember.full_name, idNumber: fId.value.trim(), role,
           startDate: fStart.value || null, endDate: fEnd.value || null,
           contribution: Number(fContrib.value || 0), incentive: Number(fInc.value || 0),
           sessionRate, expenses,
         });
-        // Persist the member's ID number back to their record for next time
         if (fId.value.trim()) {
           await supabase.from('users').update({ id_number: fId.value.trim() }).eq('id', selectedMember.id);
         }
-        const { data: newId, error } = await supabase.rpc('draft_contract', {
-          p_user_id: selectedMember.id,
-          p_start_date: fStart.value || null,
-          p_end_date: fEnd.value || null,
-          p_contribution_percent: Number(fContrib.value || 0),
-          p_incentive_percent: Number(fInc.value || 0),
-          p_session_rate: sessionRate,
-          p_contract_body: body,
-          p_annexure_expenses: expenses,
-          p_project_id: projectId(),
-        });
-        if (error) throw error;
-        toast('Draft created', 'success');
-        overlay.remove();
-        await reload();
-        openContract(newId);
-      } catch (err) { errBox.textContent = err.message || 'Could not create draft'; errBox.hidden = false;
-        saveBtn.disabled = false; saveBtn.textContent = 'Generate draft'; }
+        if (isEditing) {
+          const { error } = await supabase.rpc('update_contract', {
+            p_contract_id: editContract.id,
+            p_start_date: fStart.value || null,
+            p_end_date: fEnd.value || null,
+            p_contribution_percent: Number(fContrib.value || 0),
+            p_incentive_percent: Number(fInc.value || 0),
+            p_session_rate: sessionRate,
+            p_contract_body: bodyJson,
+            p_annexure_expenses: expenses,
+          });
+          if (error) throw error;
+          toast('Contract updated', 'success');
+          overlay.remove(); await reload(); openContract(editContract.id);
+        } else {
+          const { data: newId, error } = await supabase.rpc('draft_contract', {
+            p_user_id: selectedMember.id,
+            p_start_date: fStart.value || null,
+            p_end_date: fEnd.value || null,
+            p_contribution_percent: Number(fContrib.value || 0),
+            p_incentive_percent: Number(fInc.value || 0),
+            p_session_rate: sessionRate,
+            p_contract_body: bodyJson,
+            p_annexure_expenses: expenses,
+            p_project_id: projectId(),
+          });
+          if (error) throw error;
+          toast('Draft created', 'success');
+          overlay.remove(); await reload(); openContract(newId);
+        }
+      } catch (err) { errBox.textContent = err.message || 'Could not save'; errBox.hidden = false;
+        saveBtn.disabled = false; saveBtn.textContent = isEditing ? 'Save changes' : 'Generate draft'; }
     });
 
     dialog.appendChild(el('div', { class:'px-5 py-4 border-t border-stone-200 flex items-center justify-end gap-2' },
@@ -377,6 +416,27 @@
     dialog.appendChild(body);
 
     const footer = el('div', { class:'px-5 py-4 border-t border-stone-200 flex items-center justify-end gap-2 flex-wrap' });
+
+    // Admin and PM management actions on the left
+    if (isPmOrAdmin()) {
+      const left = el('div', { class:'mr-auto flex items-center gap-2' });
+      if (c.status !== 'Signed') {
+        left.appendChild(el('button', { class:'text-sm border border-stone-300 hover:bg-stone-50 px-4 py-2 rounded-lg',
+          onclick: () => { overlay.remove(); openDraft(c); } }, 'Edit'));
+      }
+      left.appendChild(el('button', { class:'text-sm border border-red-300 text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg',
+        onclick: async () => {
+          const warn = c.status === 'Signed'
+            ? 'This contract is SIGNED. Deleting it permanently removes a signed agreement. Are you sure?'
+            : 'Delete this contract? This cannot be undone.';
+          if (!confirm(warn)) return;
+          try { const { error } = await supabase.rpc('delete_contract', { p_contract_id: c.id }); if (error) throw error;
+            toast('Contract deleted', 'success'); overlay.remove(); reload();
+          } catch (err) { toast(err.message || 'Could not delete', 'error'); }
+        } }, 'Delete'));
+      footer.appendChild(left);
+    }
+
     footer.appendChild(el('button', { class:'text-sm border border-stone-300 hover:bg-stone-50 px-4 py-2 rounded-lg',
       onclick: () => exportContractPdf(c) }, 'Download PDF'));
     if (isPmOrAdmin() && c.status === 'Draft') {
