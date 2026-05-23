@@ -101,6 +101,7 @@
           el('div', { class:'min-w-0 flex-1' },
             el('div', { class:'flex items-center gap-2' },
               el('h3', { class:'text-base font-semibold text-stone-900' }, s.name),
+              el('span', { class:`text-xs rounded-full px-2 py-0.5 border ${s.pool_type === 'Incentive' ? 'text-violet-700 bg-violet-50 border-violet-200' : 'text-sky-700 bg-sky-50 border-sky-200'}` }, s.pool_type || 'Audio visual'),
               s.is_active ? null : el('span', { class:'text-xs text-stone-500 bg-stone-100 border border-stone-200 rounded-full px-2 py-0.5' }, 'Inactive'),
             ),
             s.description ? el('p', { class:'text-sm text-stone-600 mt-1' }, s.description) : null,
@@ -135,11 +136,15 @@
     const fTarget = el('input', { type:'date', class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.target_live_date || '' });
     const fEst = el('input', { type:'number', step:'0.01', class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.est_year1_amount ?? '' });
     const fSteps = el('textarea', { rows:'2', class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm' }, existing?.steps_to_activate || '');
+    const fPool = el('select', { class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white' },
+      el('option', { value:'Audio visual', selected: (existing?.pool_type || 'Audio visual') === 'Audio visual' ? '' : null }, 'Audio visual (YouTube). Feeds Contribution royalties'),
+      el('option', { value:'Incentive', selected: existing?.pool_type === 'Incentive' ? '' : null }, 'Incentive (sponsorship, ads, donations). Feeds Incentive royalties'));
     const errBox = el('div', { class:'text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3', hidden:'' });
 
     body.append(
       lab('Stream name', fName),
       lab('Description', fDesc),
+      lab('Royalty pool this income feeds', fPool),
       el('label', { class:'flex items-center gap-2 text-sm text-stone-700' }, fActive, 'Active'),
       el('div', { class:'grid grid-cols-2 gap-3' }, lab('Target live date', fTarget), lab('Estimated annual (R)', fEst)),
       lab('Steps to activate', fSteps),
@@ -162,6 +167,7 @@
           p_est_year1_amount: fEst.value === '' ? null : Number(fEst.value),
           p_steps_to_activate: fSteps.value.trim() || null,
           p_sort_order: existing?.sort_order ?? 0,
+          p_pool_type: fPool.value,
           p_project_id: projectId(),
         });
         if (error) throw error;
