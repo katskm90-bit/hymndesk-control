@@ -143,6 +143,7 @@
     const mine = e.user_id === myUserId;
     const canActOnIt = isFinance();
     const canEditClaim = mine && e.status === 'Claimed';
+    const canDeleteIt = (mine && e.status === 'Claimed') || myRole === 'Admin';
 
     const card = el('div', { class:'bg-white border border-stone-200 rounded-xl p-4' },
       el('div', { class:'flex items-start justify-between gap-3' },
@@ -179,6 +180,22 @@
       }
     }
     if (actions.children.length > 0) card.appendChild(actions);
+
+    // Delete an incorrect claim: owner while still Claimed, or Admin at any time
+    if (canDeleteIt) {
+      actions.appendChild(el('button', {
+        class:'text-xs px-3 py-1.5 rounded-lg border border-red-300 text-red-700 hover:bg-red-50',
+        onclick: async () => {
+          if (!confirm('Delete this expense claim? This cannot be undone.')) return;
+          try {
+            const { error } = await supabase.rpc('delete_expense', { p_id: e.id });
+            if (error) throw error;
+            toast('Claim deleted', 'success'); reload();
+          } catch (err) { toast(err.message || 'Could not delete', 'error'); }
+        },
+      }, 'Delete'));
+      if (!card.contains(actions)) card.appendChild(actions);
+    }
     return card;
   }
 
