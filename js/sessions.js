@@ -489,6 +489,10 @@
       const cbPresent = el('input', { type: 'checkbox', class: 'rounded', checked: r.present ? '' : null, disabled: canManage() ? null : '' });
       const cbForfeit = el('input', { type: 'checkbox', class: 'rounded', checked: r.forfeit ? '' : null, disabled: canManage() ? null : '' });
       const fReason = el('input', { type: 'text', placeholder: 'Reason (if forfeit)', class: 'w-44 rounded-lg border border-stone-300 px-2 py-1 text-xs', value: r.forfeit_reason || '', disabled: canManage() ? null : '' });
+      const fRsvp = el('select', { class: 'rounded-lg border border-stone-300 px-2 py-1 text-xs bg-white' },
+        ...['', 'Attending', 'Not attending', 'Tentative'].map(v =>
+          el('option', { value: v, selected: (r.rsvp_status || '') === v ? '' : null }, v || 'RSVP —')));
+      const fDiet = el('input', { type: 'text', placeholder: 'Dietary needs', class: 'w-40 rounded-lg border border-stone-300 px-2 py-1 text-xs', value: r.dietary_requirements || '' });
       const update = async () => {
         const { error } = await supabase.rpc('set_session_attendance', {
           p_session_id: s.id, p_user_id: r.user_id,
@@ -497,18 +501,33 @@
         });
         if (error) toast(error.message || 'Failed', 'error');
       };
+      const updateRsvp = async () => {
+        const { error } = await supabase.rpc('set_session_rsvp', {
+          p_session_id: s.id, p_user_id: r.user_id,
+          p_rsvp_status: fRsvp.value || null,
+          p_dietary_requirements: fDiet.value || null,
+        });
+        if (error) toast(error.message || 'Failed', 'error');
+      };
       cbPresent.addEventListener('change', update);
       cbForfeit.addEventListener('change', update);
       fReason.addEventListener('blur', update);
+      fRsvp.addEventListener('change', updateRsvp);
+      fDiet.addEventListener('blur', updateRsvp);
 
-      list.appendChild(el('div', { class: 'flex items-center gap-3 px-3 py-2 text-sm' },
-        el('div', { class: 'flex-1 min-w-0' },
-          el('div', { class: 'text-stone-900 truncate' }, r.full_name),
-          el('div', { class: 'text-xs text-stone-500' }, r.role_name || '—'),
+      list.appendChild(el('div', { class: 'px-3 py-2 text-sm' },
+        el('div', { class: 'flex items-center gap-3' },
+          el('div', { class: 'flex-1 min-w-0' },
+            el('div', { class: 'text-stone-900 truncate' }, r.full_name),
+            el('div', { class: 'text-xs text-stone-500' }, r.role_name || '—'),
+          ),
+          el('label', { class: 'flex items-center gap-1 text-xs' }, cbPresent, 'Present'),
+          el('label', { class: 'flex items-center gap-1 text-xs' }, cbForfeit, 'Forfeit'),
+          fReason,
         ),
-        el('label', { class: 'flex items-center gap-1 text-xs' }, cbPresent, 'Present'),
-        el('label', { class: 'flex items-center gap-1 text-xs' }, cbForfeit, 'Forfeit'),
-        fReason,
+        el('div', { class: 'flex items-center gap-2 mt-2 flex-wrap pl-0' },
+          fRsvp, fDiet,
+        ),
       ));
     });
     body.appendChild(list);
