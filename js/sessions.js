@@ -18,6 +18,7 @@
   let sessions = [];
   let members  = [];
   let statuses = [];
+  let books    = [];
   let myRole = null;
 
   function el(tag, attrs, ...children) {
@@ -46,15 +47,17 @@
     const { data: prof } = await supabase.from('users').select('role:roles(name)').eq('id', user.id).maybeSingle();
     myRole = prof?.role?.name || null;
     const projectId = window.HD_Project ? window.HD_Project.getId() : null;
-    const [sRes, mRes, stRes] = await Promise.all([
+    const [sRes, mRes, stRes, bRes] = await Promise.all([
       supabase.rpc('list_sessions', { p_project_id: projectId }),
       supabase.from('users').select('id, full_name').eq('is_active', true).order('full_name'),
       supabase.from('lookups').select('id, value, sort_order').eq('domain','workflow_state').eq('is_active',true).order('sort_order'),
+      supabase.from('books').select('id, name, language_id, sort_order, is_active').eq('is_active',true).order('sort_order'),
     ]);
     if (sRes.error) throw sRes.error;
     sessions = sRes.data || [];
     members  = mRes.data || [];
     statuses = stRes.data || [];
+    books    = bRes.data || [];
   }
 
   M.render = function (container, opts) {
@@ -151,8 +154,16 @@
       ...['Session','Mock Up','Rehearsal','Other'].map(v => el('option', { value: v, selected: (existing?.session_type || 'Session') === v ? '' : null }, v)));
     const fNum = el('input', { type: 'number', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.session_number ?? '' });
     const fName = el('input', { type: 'text', required: '', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.name || '' });
-    const fRange = el('input', { type: 'text', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.hymn_range_label || '' });
-    const fCount = el('input', { type: 'number', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.hymn_count ?? 0 });
+    // Structured hymn range: book + from + to. Defaults the book to the active project's book.
+    const projectBookId = (window.HD_Project && window.HD_Project.current) ? (window.HD_Project.current()?.book_id || '') : '';
+    const fBook = el('select', { class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white' },
+      el('option', { value: '' }, 'Select a book...'),
+      ...books.map(b => el('option', { value: b.id, selected: b.id === projectBookId ? '' : null }, b.name)));
+    const fFrom = el('input', { type: 'number', min: '1', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', placeholder: 'From' });
+    const fTo   = el('input', { type: 'number', min: '1', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', placeholder: 'To' });
+    const rangeHint = el('div', { class: 'text-xs text-stone-500' },
+      isEdit && existing?.hymn_range_label ? ('Currently: ' + existing.hymn_range_label + ' · ' + (existing.hymn_count || 0) + ' hymns. Enter a range below to link more.')
+                                           : 'Optional. Links every hymn in the chosen book between these numbers to this session on save.');
     const fDate = el('input', { type: 'date', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.scheduled_date || '' });
     const fSetup = el('input', { type: 'time', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.setup_time || '' });
     const fShoot = el('input', { type: 'time', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.shoot_start_time || '' });
@@ -167,7 +178,12 @@
     body.append(
       el('div', { class: 'grid grid-cols-2 gap-3' }, lab('Type', fType), lab('Number', fNum)),
       lab('Name', fName),
-      el('div', { class: 'grid grid-cols-2 gap-3' }, lab('Hymn range label', fRange), lab('Hymn count', fCount)),
+      el('div', { class: 'rounded-lg border border-stone-200 bg-stone-50 p-3 space-y-2' },
+        el('div', { class: 'text-sm font-medium text-stone-700' }, 'Hymn range'),
+        lab('Book', fBook),
+        el('div', { class: 'grid grid-cols-2 gap-3' }, lab('From number', fFrom), lab('To number', fTo)),
+        rangeHint,
+      ),
       el('div', { class: 'grid grid-cols-3 gap-3' }, lab('Scheduled date', fDate), lab('Setup time', fSetup), lab('Shoot start', fShoot)),
       el('div', { class: 'grid grid-cols-2 gap-3' }, lab('Edit deadline', fEdit), lab('Upload date', fUpload)),
       lab('Status', fStatus),
@@ -180,16 +196,21 @@
     submitBtn.addEventListener('click', async () => {
       errBox.hidden = true;
       if (!fName.value.trim()) { errBox.textContent = 'Session name required'; errBox.hidden = false; return; }
+      // If any range field is filled, require all three
+      const wantRange = fFrom.value !== '' || fTo.value !== '';
+      if (wantRange && (!fBook.value || fFrom.value === '' || fTo.value === '')) {
+        errBox.textContent = 'To link a hymn range, choose a book and enter both a from and a to number.'; errBox.hidden = false; return;
+      }
       submitBtn.disabled = true; submitBtn.textContent = 'Saving...';
       try {
         const projectId = window.HD_Project ? window.HD_Project.getId() : null;
-        const { error } = await supabase.rpc('upsert_session', {
+        const { data: savedId, error } = await supabase.rpc('upsert_session', {
           p_id: existing?.id || null,
           p_session_number: fNum.value === '' ? null : Number(fNum.value),
           p_session_type:   fType.value,
           p_name:           fName.value.trim(),
-          p_hymn_range_label: fRange.value.trim() || null,
-          p_hymn_count:     fCount.value === '' ? 0 : Number(fCount.value),
+          p_hymn_range_label: existing?.hymn_range_label || null,
+          p_hymn_count:     existing?.hymn_count ?? 0,
           p_scheduled_date: fDate.value || null,
           p_setup_time:     fSetup.value || null,
           p_shoot_start_time: fShoot.value || null,
@@ -201,7 +222,24 @@
           p_project_id:     projectId,
         });
         if (error) throw error;
-        toast(isEdit ? 'Session saved' : 'Session created', 'success');
+
+        // If a hymn range was provided, link them in one action
+        if (wantRange && savedId) {
+          const { data: linkRes, error: linkErr } = await supabase.rpc('link_hymns_to_session', {
+            p_session_id: savedId,
+            p_book_id:    fBook.value,
+            p_from:       Number(fFrom.value),
+            p_to:         Number(fTo.value),
+            p_project_id: projectId,
+          });
+          if (linkErr) throw linkErr;
+          const r = linkRes || {};
+          let msg = `${r.linked || 0} hymns linked`;
+          if (r.already_on_other > 0) msg += `, ${r.already_on_other} already on other sessions left unchanged`;
+          toast(msg, 'success');
+        } else {
+          toast(isEdit ? 'Session saved' : 'Session created', 'success');
+        }
         overlay.remove(); reload();
       } catch (err) { errBox.textContent = err.message || 'Could not save'; errBox.hidden = false;
         submitBtn.disabled = false; submitBtn.textContent = isEdit ? 'Save' : 'Create'; }
