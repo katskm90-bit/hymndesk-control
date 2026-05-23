@@ -35,17 +35,21 @@
   function isOverdue(t) { return t.target_date && !isDone(t) && new Date(t.target_date) < startOfToday(); }
   function startOfToday() { const d = new Date(); d.setHours(0,0,0,0); return d; }
 
+  let pendingContracts = [];
   async function loadAll() {
     const { data: { user } } = await supabase.auth.getUser();
     myUserId = user.id;
     const pid = projectId();
-    const [tRes, stRes] = await Promise.all([
+    const [tRes, stRes, cRes] = await Promise.all([
       supabase.rpc('list_tasks', { p_phase_id: null, p_owner_id: myUserId, p_status: null, p_priority: null, p_project_id: pid }),
       supabase.from('lookups').select('id, value, sort_order').eq('domain','task_status').eq('is_active',true).order('sort_order'),
+      supabase.rpc('list_contracts', { p_project_id: pid }),
     ]);
     if (tRes.error) throw tRes.error;
     tasks = tRes.data || [];
     statuses = stRes.data || [];
+    // Contracts awaiting my signature
+    pendingContracts = cRes.error ? [] : (cRes.data || []).filter(c => c.user_id === myUserId && c.status !== 'Signed');
   }
 
   M.render = function (container, opts) {
@@ -67,9 +71,19 @@
       el('p', { class:'text-sm text-stone-500 mt-1' }, `${incomplete.length} to do · ${done.length} complete`),
     ));
 
+    // Contract awaiting signature prompt
+    if (pendingContracts.length > 0) {
+      wrap.appendChild(el('div', { class:'bg-brand-50 border-2 border-brand-200 rounded-xl p-4 flex items-center justify-between gap-3' },
+        el('div', null,
+          el('div', { class:'font-semibold text-stone-900' }, pendingContracts.length === 1 ? 'Sign your contract' : `Sign your contracts (${pendingContracts.length})`),
+          el('div', { class:'text-xs text-stone-600 mt-0.5' }, 'You have a contract waiting for your signature.')),
+        el('button', { class:'bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg shrink-0',
+          onclick: () => { window.location.hash = '#/contracts'; } }, 'Go to contract')));
+    }
+
     if (tasks.length === 0) {
       wrap.appendChild(el('div', { class:'bg-white border border-stone-200 rounded-xl p-8 text-center text-sm text-stone-500' },
-        'You have no tasks assigned to you in this project yet.'));
+        pendingContracts.length > 0 ? 'You have no other tasks assigned to you yet.' : 'You have no tasks assigned to you in this project yet.'));
       return wrap;
     }
 
