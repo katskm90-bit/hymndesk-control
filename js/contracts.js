@@ -452,54 +452,186 @@
     return wrap;
   }
 
-  // ----- Contract PDF (print to PDF) --------------------------------------
+  // ----- Contract PDF (print to PDF) — full agreement ---------------------
   function exportContractPdf(c) {
     const w = window.open('', '_blank');
     if (!w) { toast('Allow pop-ups to download the PDF', 'error'); return; }
     const b = c.contract_body || {};
     const duties = (b.responsibilities || []);
     const exp = (c.annexure_expenses || []);
-    const dutyHtml = duties.map((d,i)=>`<p style="margin:4px 0 4px 18px">(${String.fromCharCode(97+i)}) ${esc(d)}</p>`).join('');
+    const hasRate = c.session_rate != null;
+    const cShare = Number(c.contribution_percent).toFixed(2);
+    const iShare = Number(c.incentive_percent).toFixed(2);
+
+    const dutyHtml = duties.length
+      ? duties.map((d,i)=>`<p class="sub">(${String.fromCharCode(97+i)}) ${esc(d)}</p>`).join('')
+      : '<p class="muted">No specific responsibilities are recorded for this role.</p>';
     const expHtml = exp.length
-      ? exp.map(e=>`<tr><td style="padding:5px;border:1px solid #ddd">${esc(e.description)}</td><td style="padding:5px;border:1px solid #ddd">${esc(e.notes||'')}</td><td style="padding:5px;border:1px solid #ddd;text-align:right">${e.amount!=null?money(e.amount):''}</td></tr>`).join('')
-      : '<tr><td colspan="3" style="padding:5px;border:1px solid #ddd;color:#888">No agreed expenses recorded.</td></tr>';
-    const rateClause = c.session_rate != null
-      ? `<p><b>Session rate.</b> The Contractor is paid ${money(c.session_rate)} for each production session they attend, as recorded in the session attendance register. The session rate is paid in addition to the Contribution Royalty and the Incentive Royalty and does not reduce either.</p>` : '';
-    const signedHtml = c.status === 'Signed'
-      ? `<p style="margin-top:8px"><b>Signed electronically</b> by ${esc(c.signed_full_name)} at ${esc(c.signed_place||'unspecified place')} on ${esc(fmtDate(c.signed_at))}, in accordance with the Electronic Communications and Transactions Act 25 of 2002.</p>`
-      : `<p style="margin-top:8px;color:#888">Signature: ______________________   Place: ______________   Date: ____________</p>`;
+      ? exp.map(e=>`<tr><td>${esc(e.description)}</td><td>${esc(e.notes||'')}</td><td style="text-align:right">${e.amount!=null?money(e.amount):''}</td></tr>`).join('')
+      : '<tr><td colspan="3" class="muted">No agreed expenses recorded.</td></tr>';
+
+    // Clause numbering for compensation depends on whether a session rate exists
+    const sessionClause = hasRate
+      ? `<p class="cl"><b>5.9 Session Rate.</b> A session rate has been agreed with the Contractor. The Contractor is paid ${money(c.session_rate)} for each production session they attend, as recorded in the session attendance register. The session rate is paid in addition to the Contribution Royalty and the Incentive Royalty and does not reduce either.</p>` : '';
+    const gnum = hasRate ? 10 : 9;
+
+    const signedBlock = c.status === 'Signed'
+      ? `<div class="box"><b>Signed electronically by the Contractor</b><br/>${esc(c.signed_full_name)} at ${esc(c.signed_place||'unspecified place')} on ${esc(fmtDate(c.signed_at))}.<br/>
+         This electronic signature has the same legal effect as a handwritten signature, in accordance with the Electronic Communications and Transactions Act 25 of 2002.</div>`
+      : `<table class="sig"><tr>
+           <td><b>Signed for ${esc(COMPANY.name)}</b><br/><br/>Signature: ____________________<br/>Name: ${esc(COMPANY.rep)}<br/>Capacity: ${esc(COMPANY.repRole)}<br/>Date: ____________</td>
+           <td><b>Signed by the Contractor</b><br/><br/>Signature: ____________________<br/>Name: ${esc(c.full_name)}<br/>Place: ____________<br/>Date: ____________</td>
+         </tr></table>`;
 
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Contract ${esc(c.full_name)}</title>
-      <style>body{font-family:system-ui,Arial,sans-serif;max-width:720px;margin:36px auto;padding:0 22px;color:#1c1917;font-size:13px;line-height:1.5}
+      <style>
+      body{font-family:system-ui,Arial,sans-serif;max-width:740px;margin:34px auto;padding:0 24px;color:#1c1917;font-size:12.5px;line-height:1.55}
       .head{display:flex;align-items:center;gap:12px;border-bottom:2px solid #e7e5e4;padding-bottom:14px;margin-bottom:16px}
-      h1{font-size:18px;margin:0} h2{font-size:14px;margin:18px 0 6px;color:#1c1917} .muted{color:#78716c;font-size:12px;margin:0}
+      h1{font-size:18px;margin:0} h2{font-size:13.5px;margin:18px 0 6px;color:#1c1917;border-bottom:1px solid #eee;padding-bottom:3px}
+      h3{font-size:12.5px;margin:12px 0 4px;color:#9a3412}
+      .muted{color:#78716c} .cl{margin:5px 0} .sub{margin:3px 0 3px 18px}
+      .box{background:#faf9f8;border:1px solid #e7e5e4;border-radius:8px;padding:10px;margin:10px 0}
       table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
-      .box{background:#faf9f8;border:1px solid #e7e5e4;border-radius:8px;padding:10px;margin:8px 0}</style></head><body>
+      th,td{padding:5px 6px;border:1px solid #ddd;text-align:left;vertical-align:top}
+      table.sig td{border:none;width:50%;vertical-align:top;padding:4px 10px}
+      .pb{page-break-before:always}
+      </style></head><body>
+
       <div class="head">
-        <img src="https://control.hymndesk.co.za/icons/icon-192x192.png" alt="" style="width:44px;height:44px;border-radius:10px" />
-        <div><h1>Independent Contractor Agreement</h1><p class="muted">${esc(COMPANY.name)} · ${esc(COMPANY.operating)}</p></div>
+        <img src="https://control.hymndesk.co.za/icons/icon-192x192.png" alt="" style="width:46px;height:46px;border-radius:10px" />
+        <div><h1>Independent Contractor Agreement</h1><p class="muted" style="margin:2px 0 0">${esc(COMPANY.name)} · ${esc(COMPANY.operating)}</p></div>
       </div>
-      <div class="box"><b>Company:</b> ${esc(COMPANY.name)}, Reg ${esc(COMPANY.reg)}, represented by ${esc(COMPANY.rep)} (${esc(COMPANY.repRole)})<br/>
-      <b>Contractor:</b> ${esc(c.full_name)}${c.id_number?', ID '+esc(c.id_number):''}<br/>
-      <b>Role:</b> ${esc(c.role_name)} &nbsp; <b>Term:</b> ${esc(fmtDate(c.start_date))} to ${esc(fmtDate(c.end_date))}</div>
+
+      <div class="box">
+        <b>Company:</b> ${esc(COMPANY.name)}, registration number ${esc(COMPANY.reg)}, represented by ${esc(COMPANY.rep)} (${esc(COMPANY.repRole)}).<br/>
+        <b>Contractor:</b> ${esc(c.full_name)}${c.id_number?', identity number '+esc(c.id_number):''}.<br/>
+        <b>Role:</b> ${esc(c.role_name)} &nbsp;|&nbsp; <b>Term:</b> ${esc(fmtDate(c.start_date))} to ${esc(fmtDate(c.end_date))}.
+      </div>
+
+      <h2>Preamble</h2>
+      <p>This Agreement is entered into between ${esc(COMPANY.name)}, a company incorporated in the Republic of South Africa and represented by its Founder, ${esc(COMPANY.rep)}, and the Contractor named above. The Company is engaged in the production of audio visual hymn recordings under the HymnDesk Project, operating under Serenza Music Realm. The Company wishes to engage the Contractor in the capacity stated above for the duration of this project, and the Contractor accepts this engagement on the terms set out in this Agreement. Both parties enter into this Agreement freely and confirm that they have had the opportunity to read it in full and to seek independent legal advice before signing.</p>
+
+      <h2>1 Definitions</h2>
+      <p class="cl"><b>1.1</b> "Company" means ${esc(COMPANY.name)}.</p>
+      <p class="cl"><b>1.2</b> "Contractor" means the individual named above.</p>
+      <p class="cl"><b>1.3</b> "Project" means the HymnDesk audio visual hymn recording initiative operated under Serenza Music Realm.</p>
+      <p class="cl"><b>1.4</b> "Royalty Ledger" means the record maintained of all income received by the Project and the corresponding royalty entitlement accrued to each contributor.</p>
+      <p class="cl"><b>1.5</b> "Annual General Meeting" or "AGM" means the annual meeting held in the last week of January each year at which the financial position of the Project is presented, and royalties are approved for payment.</p>
+      <p class="cl"><b>1.6</b> "NDA" means the Non Disclosure Agreement signed as Annexure B and as a condition of the Contractor's engagement.</p>
 
       <h2>2 Services</h2>
-      <p>The Contractor is engaged in the capacity of ${esc(c.role_name)}. The specific responsibilities for this role are:</p>
+      <p class="cl"><b>2.1</b> The Contractor is engaged in the capacity of ${esc(c.role_name)}. The specific responsibilities for this role are set out below.</p>
+      <p class="cl"><b>2.2</b> The Contractor's specific responsibilities include the following:</p>
       ${dutyHtml}
+      <p class="cl"><b>2.3</b> The Contractor's role is limited to the HymnDesk Project. The Contractor is not engaged to perform services for any other Serenza Deluxe Atelier project unless a separate agreement is entered into.</p>
+      <p class="cl"><b>2.4</b> The Contractor is expected to be available during all production days, all scheduled team meetings, and all administrative deadlines set by project leadership. Where the Contractor is unavailable, they must notify the Founder with as much advance notice as possible.</p>
+      <p class="cl"><b>2.5</b> The Contractor's royalty entitlement is made up of a Contribution Royalty and an Incentive Royalty, as set out in clause 5 and recorded in the Contractor's individual royalty ledger.</p>
+
+      <h2>3 Nature of the Relationship</h2>
+      <p class="cl"><b>3.1</b> The Contractor is engaged as an independent contractor and not as an employee of ${esc(COMPANY.name)}. Nothing in this Agreement creates an employment relationship, a partnership, or any other legal entity between the parties.</p>
+      <p class="cl"><b>3.2</b> The Contractor is free to perform services for other clients during the term of this Agreement, provided that such engagements do not conflict with the obligations set out in this Agreement and do not result in a breach of the confidentiality provisions in clause 7.</p>
+      <p class="cl"><b>3.3</b> The Contractor is responsible for their own tax obligations, including income tax and any other statutory deductions that may apply to their earnings under this Agreement. The Company will not make any deductions from the Contractor's compensation on their behalf.</p>
+
+      <h2>4 Term of This Agreement</h2>
+      <p class="cl"><b>4.1</b> This Agreement commences on the date on which it is signed by both parties and continues until the end date stated above, unless terminated earlier in accordance with clause 12.</p>
+      <p class="cl"><b>4.2</b> Before the expiry of this Agreement, the parties will meet to discuss whether the engagement will be renewed. Renewal is not automatic and is subject to a fresh agreement being entered into in writing by both parties.</p>
+      <p class="cl"><b>4.3</b> The Contractor has no right to expect or demand renewal of this Agreement upon its expiry.</p>
 
       <h2>5 Compensation and Royalty Model</h2>
-      <p>The Contractor is compensated under a royalty based model made up of two separate royalty streams, being the Contribution Royalty and the Incentive Royalty. No fixed salary is payable.</p>
-      <p>The royalty pool is set at fifty percent of the net revenue of the relevant income, after tax. The remaining fifty percent is allocated to operations and the project reserve.</p>
-      <p><b>Contribution Royalty.</b> Earned from audio visual income, prorated by the production sessions in which the Contractor participated, tracked for every member. The Contractor's share is ${Number(c.contribution_percent).toFixed(2)} percent of the audio visual pool. It is retained for as long as the recordings earn, and is forfeited only on dismissal for gross misconduct.</p>
-      <p><b>Incentive Royalty.</b> Earned from incentive income, being sponsorships, advertising on the HymnDesk application, and donations from application users. The Contractor's share is ${Number(c.incentive_percent).toFixed(2)} percent of the incentive pool. It is payable only while the Contractor is an active member and is automatically forfeited from the date they cease to be active, for any reason.</p>
-      ${rateClause}
+      <p class="cl"><b>5.1</b> The Contractor is compensated under a royalty based model made up of two separate royalty streams, being the Contribution Royalty and the Incentive Royalty. No fixed salary is payable under this Agreement.</p>
+      <p class="cl"><b>5.2</b> The royalty pool is set at fifty percent of the net revenue of the relevant income in the first financial year, after tax. The remaining fifty percent is allocated to the operating costs and project reserve of the HymnDesk Project. Operating costs must be recovered in full before the royalty pool is activated.</p>
+      <h3>Contribution Royalty</h3>
+      <p class="cl"><b>5.3</b> The Contribution Royalty is earned from audio visual income, being income generated by the published recordings of the Project, including YouTube advertising income. The Contractor earns this royalty in respect of the production sessions in which they participated, as recorded in the session attendance register. Participation is tracked for every member of the team and is not limited to vocal contributors.</p>
+      <p class="cl"><b>5.4</b> The Contractor's Contribution Royalty share is ${cShare} percent of the audio visual royalty pool, prorated according to the production sessions in which the Contractor participated.</p>
+      <p class="cl"><b>5.5</b> The Contribution Royalty is retained by the Contractor for as long as the relevant recordings continue to generate income, including after the Contractor's engagement has ended. It is forfeited only where the Contractor is dismissed for gross misconduct as set out in clause 11.</p>
+      <h3>Incentive Royalty</h3>
+      <p class="cl"><b>5.6</b> The Incentive Royalty is earned from incentive income, being income from sources other than the audio visual recordings, including sponsorships, advertising carried on the HymnDesk application, and donations made by users of the HymnDesk application.</p>
+      <p class="cl"><b>5.7</b> The Contractor's Incentive Royalty share is ${iShare} percent of the incentive royalty pool.</p>
+      <p class="cl"><b>5.8</b> The Incentive Royalty is payable only while the Contractor is an active member of the Project. If the Contractor ceases to be an active member, for any reason whatsoever, the Contractor automatically forfeits all entitlement to the Incentive Royalty from the date they cease to be active.</p>
+      ${sessionClause}
+      <h3>General</h3>
+      <p class="cl"><b>5.${gnum}</b> The royalty split and the overall income distribution model may be reviewed at the Annual General Meeting. Any change to the model requires a majority vote by active contributors and the written approval of company management. No unilateral change may be made by either party.</p>
+      <p class="cl"><b>5.${gnum+1}</b> The Contractor's royalty entitlement accrues from the date on which income is received by the company and is recorded in the royalty ledger. The ledger is available for review by the Contractor at the scheduled annual review.</p>
 
-      <h2>Annexure A: Agreed Expense Schedule</h2>
-      <table><tr><th style="padding:5px;border:1px solid #ddd;text-align:left">Description</th><th style="padding:5px;border:1px solid #ddd;text-align:left">Notes</th><th style="padding:5px;border:1px solid #ddd;text-align:right">Amount</th></tr>${expHtml}</table>
+      <h2 class="pb">6 Royalty Review and Payment Process</h2>
+      <p class="cl"><b>6.1</b> No later than ten business days before the Annual General Meeting, the Contractor will be given the opportunity to review their individual royalty ledger, in the presence of the Project Manager and the Founder.</p>
+      <p class="cl"><b>6.2</b> Upon completing the review to their satisfaction, the Contractor will sign a Royalty Amount Acknowledgement Form confirming that the amount recorded is accurate and agreed.</p>
+      <p class="cl"><b>6.3</b> Provided no dispute has been raised, all royalties due will be paid within thirty days following the Annual General Meeting.</p>
+      <p class="cl"><b>6.4</b> Where a dispute is raised, royalties will be withheld pending resolution. Once resolved, the company will pay the affected Contractor as soon as practically possible.</p>
+      <p class="cl"><b>6.5</b> Where a Contractor is in breach of this Agreement or the NDA at the time of the Annual General Meeting, their royalties may be withheld pending resolution. Forfeiture of royalties, whether in full or in part, will be applied only where the nature and severity of the breach justify such a consequence.</p>
 
-      <h2>Signature</h2>
-      ${signedHtml}
-      <p class="muted" style="margin-top:24px">This is a working copy generated by HymnDesk Control. The full agreement includes the standard terms and the Non Disclosure Agreement at Annexure B.</p>
+      <h2>7 Confidentiality and Non Disclosure</h2>
+      <p class="cl"><b>7.1</b> The Contractor acknowledges that during their engagement they will receive confidential information belonging to the Company and the Project.</p>
+      <p class="cl"><b>7.2</b> The Contractor is bound by the terms of the project Non Disclosure Agreement signed as Annexure B. The obligations in that agreement are incorporated into this Agreement by reference.</p>
+      <p class="cl"><b>7.3</b> A breach of the Non Disclosure Agreement constitutes a breach of this Agreement and will be addressed in accordance with the consequences set out in both documents.</p>
+
+      <h2>8 Intellectual Property</h2>
+      <p class="cl"><b>8.1</b> All creative output produced by the Contractor during their engagement vests immediately and exclusively in the HymnDesk Project. This includes all audio recordings, video footage, edited content, musical arrangements, written material, and any other work product created in connection with the Project.</p>
+      <p class="cl"><b>8.2</b> The Contractor waives any moral rights they may have in connection with such output, to the extent permitted by the Copyright Act 98 of 1978.</p>
+      <p class="cl"><b>8.3</b> The Contractor may not reproduce, distribute, publish, or commercialise any project output without the prior written consent of the Company.</p>
+
+      <h2>9 Code of Conduct</h2>
+      <p class="cl"><b>9.1</b> The Contractor will conduct themselves professionally at all times, including on set, at the recording venue, in digital communications, and in any public space where they may be identifiable as a contributor to this project.</p>
+      <p class="cl"><b>9.2</b> The dress code for all production days will be determined and communicated in writing by the Project Manager before each production day. Given that the project serves a religious audience, the dress code is designed to ensure that the appearance of the team does not become a distraction from the content being produced. The Contractor is expected to comply without exception.</p>
+      <p class="cl"><b>9.3</b> The Contractor must not post any behind the scenes content, project announcements, financial information, or other project related material on social media or any public platform without the prior written approval of project management.</p>
+      <p class="cl"><b>9.4</b> Any breach of the code of conduct will be addressed in accordance with the disciplinary process set out in the Contributor Handbook.</p>
+
+      <h2>10 Expenses</h2>
+      <p class="cl"><b>10.1</b> The expenses agreed between the Contractor and the company prior to the signing of this Agreement are set out in Annexure A, which forms part of this Agreement. These are the only expenses the company is obligated to cover.</p>
+      <p class="cl"><b>10.2</b> Any additional expense that arises after signing must be reported to the Project Manager in writing as soon as reasonably possible. The company may approve or decline at its sole discretion and is not bound to cover any unapproved expense.</p>
+
+      <h2>11 Forfeiture of Royalties</h2>
+      <p class="cl"><b>11.1</b> Forfeiture is applied differently to the two royalty streams.</p>
+      <p class="sub">(a) Incentive Royalty: the Contractor automatically forfeits all entitlement to the Incentive Royalty from the date they cease to be an active member, for any reason whatsoever.</p>
+      <p class="sub">(b) Contribution Royalty on gross misconduct: the Contractor forfeits their Contribution Royalty in full only where found to have committed gross misconduct, including wilful breach of the NDA, fraud or financial dishonesty, deliberate sabotage of project property, conduct bringing the company into serious disrepute, or breach of confidentiality causing material harm.</p>
+      <p class="sub">(c) Contribution Royalty in all other cases: where the Contractor leaves for any reason other than gross misconduct, they retain the Contribution Royalty earned for the sessions in which they participated, for as long as the recordings earn.</p>
+      <p class="cl"><b>11.2</b> Any forfeiture of the Contribution Royalty on the grounds of gross misconduct will be applied in accordance with South African law and the principles of fairness. The Contractor will be given the opportunity to be heard before such a decision is made.</p>
+      <p class="cl"><b>11.3</b> Forfeited royalties revert to the HymnDesk project reserve fund.</p>
+
+      <h2>12 Termination</h2>
+      <p class="cl"><b>12.1</b> Either party may terminate this Agreement by giving thirty calendar days written notice, except in cases of gross misconduct where the company may terminate immediately.</p>
+      <p class="cl"><b>12.2</b> On termination, the Contractor must return all company property, project files, and access credentials within five business days and confirm this in writing to the Founder.</p>
+      <p class="cl"><b>12.3</b> The confidentiality obligations, intellectual property provisions, and applicable forfeiture provisions survive termination and remain in force for the periods specified in the Non Disclosure Agreement.</p>
+
+      <h2>13 General Provisions</h2>
+      <p class="cl"><b>13.1</b> Governing Law: This Agreement is governed by the laws of the Republic of South Africa. Any dispute is subject to the jurisdiction of the High Court of South Africa, Gauteng Division.</p>
+      <p class="cl"><b>13.2</b> Entire Agreement: This Agreement, together with Annexure A and the Non Disclosure Agreement at Annexure B, constitutes the entire agreement between the parties.</p>
+      <p class="cl"><b>13.3</b> Amendments: No amendment is valid unless made in writing and signed by both parties.</p>
+      <p class="cl"><b>13.4</b> Severability: If any provision is found to be invalid or unenforceable, the remaining provisions continue in full force.</p>
+      <p class="cl"><b>13.5</b> Electronic Signatures: Both parties agree that an electronic signature has the same legal effect as a handwritten signature, in accordance with the Electronic Communications and Transactions Act 25 of 2002.</p>
+
+      <h2>14 Signatures</h2>
+      <p>By signing below, both parties confirm that they have read, understood, and agree to be bound by all the terms of this Agreement, including Annexure A and the Non Disclosure Agreement at Annexure B.</p>
+      ${signedBlock}
+
+      <h2 class="pb">Annexure A: Agreed Expense Schedule</h2>
+      <p class="muted">${esc(c.full_name)} · ${esc(c.role_name)}</p>
+      <p>This Annexure lists the expenses agreed before signing. In line with clause 10, these are the only expenses the company is obligated to cover.</p>
+      <table><tr><th>Description</th><th>Notes</th><th style="text-align:right">Amount</th></tr>${expHtml}</table>
+
+      <h2 class="pb">Annexure B: Non Disclosure Agreement</h2>
+      <p>This Non Disclosure Agreement is entered into between ${esc(COMPANY.name)}, represented by ${esc(COMPANY.rep)} (the Company), and ${esc(c.full_name)} (the Receiving Party). It is a condition of the Receiving Party's engagement on the HymnDesk Project.</p>
+      <h3>1 Purpose</h3>
+      <p>In the course of their engagement, the Receiving Party will be given access to confidential information belonging to the Company and the Project. This Agreement sets out how that information must be treated.</p>
+      <h3>2 Confidential Information</h3>
+      <p>Confidential Information means any information disclosed to or learned by the Receiving Party that is not in the public domain, including financial information, royalty figures and calculations, the identities and details of contributors, sponsors and funding partners, unreleased recordings, footage, edited content and musical arrangements, the Project's plans, schedules and internal communications, and the contents of the contributor tracker and royalty ledger.</p>
+      <h3>3 Obligations</h3>
+      <p>The Receiving Party must keep all Confidential Information strictly confidential, use it only for the purpose of performing their role, take reasonable care to protect it, and must not post or share it on any public platform. The Receiving Party must not copy or remove Confidential Information from the Project's systems except as required to perform their role.</p>
+      <h3>4 Protection of Personal Information</h3>
+      <p>The Receiving Party acknowledges that some Confidential Information may include personal information as defined in the Protection of Personal Information Act 4 of 2013, and must handle all such information lawfully and only for the purpose of the Project.</p>
+      <h3>5 Duration</h3>
+      <p>The obligations apply from the date of signing, continue for the duration of the engagement, and continue for three years after the engagement ends, except in respect of trade secrets and unreleased creative output, where they continue for as long as the information remains confidential.</p>
+      <h3>6 Return of Information</h3>
+      <p>On the ending of the engagement, or on the written request of the Company, the Receiving Party must return or destroy all Confidential Information in their possession and confirm in writing that they have done so.</p>
+      <h3>7 Breach</h3>
+      <p>A breach of this Agreement is a breach of the Independent Contractor Agreement and may result in the consequences set out there, including the forfeiture of royalties where the nature and severity of the breach justify it. The Company may pursue any remedy available in law, including an interdict and a claim for damages.</p>
+      <h3>8 General</h3>
+      <p>This Agreement is governed by the laws of the Republic of South Africa, subject to the jurisdiction of the High Court of South Africa, Gauteng Division. An electronic signature has the same legal effect as a handwritten signature under the Electronic Communications and Transactions Act 25 of 2002.</p>
+      ${c.status === 'Signed'
+        ? `<div class="box"><b>NDA accepted electronically by</b> ${esc(c.signed_full_name)} at ${esc(c.signed_place||'unspecified place')} on ${esc(fmtDate(c.signed_at))}, as part of signing this Agreement.</div>`
+        : `<table class="sig"><tr><td><b>For the Company</b><br/><br/>Signature: ____________________<br/>Name: ${esc(COMPANY.rep)}<br/>Date: ____________</td><td><b>Receiving Party</b><br/><br/>Signature: ____________________<br/>Name: ${esc(c.full_name)}<br/>Place: ____________<br/>Date: ____________</td></tr></table>`}
+
+      <p class="muted" style="margin-top:24px">Generated by HymnDesk Control. This document should be reviewed by a legal practitioner before reliance.</p>
       </body></html>`);
     w.document.close();
     setTimeout(() => { w.focus(); w.print(); }, 300);
