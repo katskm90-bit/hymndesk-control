@@ -46,6 +46,7 @@
   function fmtDate(d) { return d ? new Date(d).toLocaleDateString('en-ZA', { year:'numeric', month:'short', day:'numeric' }) : '—'; }
   function isFinance() { return ['Admin','Finance'].includes(myRole); }
   function isAdmin() { return myRole === 'Admin'; }
+  function isPmOrAdmin() { return ['Admin','Project Manager'].includes(myRole); }
   function canView() { return ['Admin','Finance','Project Manager','Talent'].includes(myRole); }
   function projectId() { return window.HD_Project ? window.HD_Project.getId() : null; }
 
@@ -56,7 +57,7 @@
     myRole = prof?.role?.name || null;
     const pid = projectId();
     const [mRes, sRes] = await Promise.all([
-      supabase.from('users').select('id, full_name, royalty_percent, is_active, role:roles(name)').order('full_name'),
+      supabase.from('users').select('id, full_name, contribution_percent, incentive_percent, session_rate, royalty_percent, is_active, role:roles(name)').order('full_name'),
       supabase.rpc('list_sessions', { p_project_id: pid }),
     ]);
     members  = mRes.data || [];
@@ -147,36 +148,41 @@
         return;
       }
 
-      const poolIncome = statements[0]?.pool_income || 0;
-      const distributable = statements[0]?.distributable_pool || 0;
-      const totalFinal = statements.reduce((s, x) => s + Number(x.final_share || 0), 0);
+      const avPool = statements[0]?.av_pool || 0;
+      const incPool = statements[0]?.incentive_pool || 0;
+      const totalFinal = statements.reduce((s, x) => s + Number(x.final_total || 0), 0);
 
       resultHost.appendChild(el('div', { class:'grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4' },
-        tile('Pool income', money(poolIncome)),
-        tile('Distributable', money(distributable)),
+        tile('Contribution pool', money(avPool)),
+        tile('Incentive pool', money(incPool)),
         tile('Total to pay', money(totalFinal), 'green'),
       ));
 
-      const table = el('div', { class:'bg-white border border-stone-200 rounded-xl overflow-hidden' });
-      table.appendChild(el('div', { class:'grid grid-cols-12 gap-2 px-4 py-3 bg-stone-50 border-b border-stone-200 text-xs font-medium text-stone-500 uppercase' },
-        el('div', { class:'col-span-4' }, 'Member'),
-        el('div', { class:'col-span-2 text-right' }, 'Percent'),
-        el('div', { class:'col-span-2 text-right' }, 'Attended'),
-        el('div', { class:'col-span-2 text-right' }, 'Final'),
-        el('div', { class:'col-span-2 text-right' }, ''),
+      const anySession = statements.some(s => s.session_rate != null);
+      const table = el('div', { class:'bg-white border border-stone-200 rounded-xl overflow-hidden overflow-x-auto' });
+      table.appendChild(el('div', { class:'grid grid-cols-12 gap-2 px-4 py-3 bg-stone-50 border-b border-stone-200 text-xs font-medium text-stone-500 uppercase min-w-[640px]' },
+        el('div', { class:'col-span-3' }, 'Member'),
+        el('div', { class:'col-span-2 text-right' }, 'Contribution'),
+        el('div', { class:'col-span-2 text-right' }, 'Incentive'),
+        el('div', { class:'col-span-2 text-right' }, anySession ? 'Session' : ''),
+        el('div', { class:'col-span-2 text-right' }, 'Total'),
+        el('div', { class:'col-span-1 text-right' }, ''),
       ));
       statements.forEach(s => {
-        table.appendChild(el('div', { class:'grid grid-cols-12 gap-2 px-4 py-3 border-b border-stone-100 last:border-b-0 text-sm items-center' },
-          el('div', { class:'col-span-4 min-w-0' },
+        table.appendChild(el('div', { class:'grid grid-cols-12 gap-2 px-4 py-3 border-b border-stone-100 last:border-b-0 text-sm items-center min-w-[640px]' },
+          el('div', { class:'col-span-3 min-w-0' },
             el('div', { class:'text-stone-900 truncate' }, s.user_name),
-            s.forfeitures_total > 0 ? el('div', { class:'text-xs text-red-600' }, 'Forfeit ' + money(s.forfeitures_total)) : null,
+            el('div', { class:'text-xs text-stone-500' }, `attended ${s.sessions_attended}/${s.sessions_total}`),
+            !s.is_active ? el('div', { class:'text-xs text-amber-600' }, 'inactive') : null,
+            s.forfeitures_total > 0 ? el('div', { class:'text-xs text-red-600' }, 'forfeit ' + money(s.forfeitures_total)) : null,
           ),
-          el('div', { class:'col-span-2 text-right text-stone-600' }, pct(s.user_percentage) + ' percent'),
-          el('div', { class:'col-span-2 text-right text-stone-600' }, `${s.sessions_attended}/${s.sessions_total}`),
-          el('div', { class:'col-span-2 text-right font-medium text-stone-900' }, money(s.final_share)),
-          el('div', { class:'col-span-2 text-right' },
+          el('div', { class:'col-span-2 text-right text-stone-700' }, money(s.contribution_amount)),
+          el('div', { class:'col-span-2 text-right text-stone-700' }, s.is_active ? money(s.incentive_amount) : el('span', { class:'text-stone-400' }, money(0))),
+          el('div', { class:'col-span-2 text-right text-stone-600' }, s.session_rate != null ? money(s.session_pay) : '—'),
+          el('div', { class:'col-span-2 text-right font-medium text-stone-900' }, money(s.final_total)),
+          el('div', { class:'col-span-1 text-right' },
             isFinance() ? el('button', { class:'text-xs text-brand-600 hover:text-brand-700',
-              onclick: (ev) => genStatement(s, end, start, ev.target) }, 'Generate') : null,
+              onclick: (ev) => genStatement(s, end, start, ev.target) }, 'Save') : null,
           ),
         ));
       });
@@ -227,30 +233,36 @@
   function renderMembers(host) {
     host.innerHTML = '';
     const note = el('p', { class:'text-sm text-stone-600 mt-4 mb-3' },
-      'Each member has a royalty percentage. The sum across active members is your distributable pool split. Only Admin can change these.');
+      'Each member has a Contribution percentage (audio visual royalties, retained for life) and an Incentive percentage (sponsorship, advertising and donation royalties, paid only while active). A session rate is optional and only shows where it has been set. Only Admin and Project Manager can change these.');
     host.appendChild(note);
 
-    const totalPct = members.filter(m => m.is_active).reduce((s, m) => s + Number(m.royalty_percent || 0), 0);
-    host.appendChild(el('div', { class:`text-sm mb-3 ${Math.abs(totalPct - 100) < 0.01 ? 'text-emerald-700' : 'text-amber-700'}` },
-      `Active members total: ${pct(totalPct)} percent` + (Math.abs(totalPct - 100) < 0.01 ? '' : ' (does not sum to 100)')));
+    const totalContrib = members.filter(m => m.is_active).reduce((s, m) => s + Number(m.contribution_percent || 0), 0);
+    const totalInc = members.filter(m => m.is_active).reduce((s, m) => s + Number(m.incentive_percent || 0), 0);
+    host.appendChild(el('div', { class:'grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4' },
+      tile('Active Contribution total', pct(totalContrib) + ' percent', Math.abs(totalContrib - 100) < 0.01 ? 'green' : 'amber'),
+      tile('Active Incentive total', pct(totalInc) + ' percent', Math.abs(totalInc - 100) < 0.01 ? 'green' : 'amber'),
+    ));
 
     const table = el('div', { class:'bg-white border border-stone-200 rounded-xl overflow-hidden' });
     table.appendChild(el('div', { class:'grid grid-cols-12 gap-2 px-4 py-3 bg-stone-50 border-b border-stone-200 text-xs font-medium text-stone-500 uppercase' },
-      el('div', { class:'col-span-5' }, 'Member'),
-      el('div', { class:'col-span-3' }, 'Role'),
-      el('div', { class:'col-span-2 text-right' }, 'Percent'),
+      el('div', { class:'col-span-4' }, 'Member'),
+      el('div', { class:'col-span-2 text-right' }, 'Contribution'),
+      el('div', { class:'col-span-2 text-right' }, 'Incentive'),
+      el('div', { class:'col-span-2 text-right' }, 'Session rate'),
       el('div', { class:'col-span-2 text-right' }, ''),
     ));
     members.forEach(m => {
       const row = el('div', { class:'grid grid-cols-12 gap-2 px-4 py-3 border-b border-stone-100 last:border-b-0 text-sm items-center' },
-        el('div', { class:'col-span-5 min-w-0' },
+        el('div', { class:'col-span-4 min-w-0' },
           el('div', { class:`text-stone-900 truncate ${m.is_active ? '' : 'text-stone-400'}` }, m.full_name),
-          m.is_active ? null : el('div', { class:'text-xs text-stone-400' }, 'Inactive'),
+          el('div', { class:'text-xs text-stone-500 truncate' }, m.role?.name || '—'),
+          m.is_active ? null : el('div', { class:'text-xs text-amber-600' }, 'Inactive · incentive not paid'),
         ),
-        el('div', { class:'col-span-3 text-stone-600 truncate' }, m.role?.name || '—'),
-        el('div', { class:'col-span-2 text-right text-stone-900' }, pct(m.royalty_percent) + '%'),
+        el('div', { class:'col-span-2 text-right text-stone-900' }, pct(m.contribution_percent) + '%'),
+        el('div', { class:'col-span-2 text-right text-stone-900' }, pct(m.incentive_percent) + '%'),
+        el('div', { class:'col-span-2 text-right text-stone-600' }, m.session_rate != null ? money(m.session_rate) : '—'),
         el('div', { class:'col-span-2 text-right' },
-          isAdmin() ? el('button', { class:'text-xs text-brand-600 hover:text-brand-700', onclick: () => editPercent(m) }, 'Edit') : null,
+          isPmOrAdmin() ? el('button', { class:'text-xs text-brand-600 hover:text-brand-700', onclick: () => editRoyalty(m) }, 'Edit') : null,
         ),
       );
       table.appendChild(row);
@@ -258,26 +270,45 @@
     host.appendChild(table);
   }
 
-  function editPercent(m) {
+  function editRoyalty(m) {
     const overlay = el('div', { class:'fixed inset-0 z-50 bg-stone-900/50 flex items-center justify-center p-4' });
     const dlg = el('div', { class:'bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 space-y-3' });
-    const f = el('input', { type:'number', step:'0.01', class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: m.royalty_percent ?? '0' });
+    const fContrib = el('input', { type:'number', step:'0.01', min:'0', class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: m.contribution_percent ?? '0' });
+    const fInc = el('input', { type:'number', step:'0.01', min:'0', class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: m.incentive_percent ?? '0' });
+    // Session rate optional: a checkbox reveals the field. Off means not applicable.
+    const hasRate = m.session_rate != null;
+    const fRateOn = el('input', { type:'checkbox', class:'rounded', checked: hasRate ? '' : null });
+    const fRate = el('input', { type:'number', step:'0.01', min:'0', class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: m.session_rate ?? '', disabled: hasRate ? null : '' });
+    fRateOn.addEventListener('change', () => { fRate.disabled = !fRateOn.checked; if (!fRateOn.checked) fRate.value = ''; });
+    const errBox = el('div', { class:'text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-2', hidden:'' });
+
     dlg.append(
       el('h4', { class:'font-semibold' }, m.full_name),
-      lab('Royalty percent', f),
-      el('div', { class:'flex items-center justify-end gap-2' },
+      el('p', { class:'text-xs text-stone-500' }, m.is_active ? 'Active member' : 'Inactive. Set the incentive percentage to 0 if they have left.'),
+      lab('Contribution percent (audio visual)', fContrib),
+      lab('Incentive percent (sponsorship, ads, donations)', fInc),
+      el('label', { class:'flex items-center gap-2 text-sm text-stone-700 pt-1' }, fRateOn, 'This member has a session rate'),
+      lab('Session rate (Rand per session attended)', fRate),
+      errBox,
+      el('div', { class:'flex items-center justify-end gap-2 pt-1' },
         el('button', { class:'px-4 py-2 text-sm rounded-lg hover:bg-stone-100', onclick: () => overlay.remove() }, 'Cancel'),
         el('button', { class:'px-4 py-2 text-sm rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium', onclick: async () => {
+          errBox.hidden = true;
           try {
-            const { error } = await supabase.rpc('update_user_royalty_percent', { p_user_id: m.id, p_new_percent: Number(f.value || 0) });
+            const { error } = await supabase.rpc('set_member_royalty', {
+              p_user_id: m.id,
+              p_contribution_percent: Number(fContrib.value || 0),
+              p_incentive_percent: Number(fInc.value || 0),
+              p_session_rate: fRateOn.checked ? Number(fRate.value || 0) : null,
+            });
             if (error) throw error;
             overlay.remove(); toast('Updated', 'success');
             await loadBase(); const b = document.querySelector('#page-content'); if (b) { b.innerHTML=''; b.appendChild(renderShell()); }
-          } catch (err) { toast(err.message || 'Failed', 'error'); }
+          } catch (err) { errBox.textContent = err.message || 'Failed'; errBox.hidden = false; }
         }}, 'Save'),
       ),
     );
-    overlay.appendChild(dlg); document.body.appendChild(overlay); f.focus();
+    overlay.appendChild(dlg); document.body.appendChild(overlay); fContrib.focus();
   }
 
   // ----- Forfeitures tab --------------------------------------------------
@@ -382,7 +413,14 @@
             el('div', { class:'text-xs text-stone-500 mt-0.5' },
               `${st.period_start ? fmtDate(st.period_start) + ' – ' : 'up to '}${fmtDate(st.period_end)} · generated ${fmtDate(st.generated_at)}`),
             el('div', { class:'text-xs text-stone-500 mt-1' },
-              `Attended ${st.sessions_attended}/${st.sessions_total} · ${pct(st.user_percentage)} percent · pool ${money(st.pool_income_in_period)}`),
+              (() => {
+                const snap = st.calculation_snapshot || {};
+                const parts = [`attended ${st.sessions_attended}/${st.sessions_total}`,
+                  `contribution ${money(snap.contribution_amount || 0)}`,
+                  `incentive ${money(snap.incentive_amount || 0)}`];
+                if (snap.session_rate != null) parts.push(`session ${money(snap.session_pay || 0)}`);
+                return parts.join(' · ');
+              })()),
           ),
           el('div', { class:'text-right' },
             el('div', { class:'text-base font-semibold text-emerald-700' }, money(st.final_share)),
@@ -452,14 +490,18 @@
   }
 
   function exportRunCsv(statements, start, end) {
-    const headers = ['Member','Percent','Sessions attended','Sessions total','Prorate factor',
-                     'Pool income','Distributable pool','Base share','Forfeitures','Final share'];
+    const headers = ['Member','Active','Contribution percent','Incentive percent',
+                     'Sessions attended','Sessions total','Prorate factor',
+                     'Contribution pool','Incentive pool','Contribution amount',
+                     'Incentive amount','Session rate','Session pay','Forfeitures','Total'];
     const lines = [headers.map(csvCell).join(',')];
     statements.forEach(s => {
       lines.push([
-        s.user_name, s.user_percentage, s.sessions_attended, s.sessions_total,
-        s.prorate_factor, s.pool_income, s.distributable_pool, s.base_share,
-        s.forfeitures_total, s.final_share,
+        s.user_name, s.is_active ? 'Yes' : 'No', s.contribution_percent, s.incentive_percent,
+        s.sessions_attended, s.sessions_total, s.prorate_factor,
+        s.av_pool, s.incentive_pool, s.contribution_amount,
+        s.incentive_amount, s.session_rate == null ? '' : s.session_rate, s.session_pay,
+        s.forfeitures_total, s.final_total,
       ].map(csvCell).join(','));
     });
     const periodLabel = (start ? start + '_to_' : 'upto_') + (end || 'today');
@@ -470,26 +512,34 @@
   function exportStatementPdf(st) {
     const w = window.open('', '_blank');
     if (!w) { toast('Allow pop-ups to download the PDF', 'error'); return; }
+    const snap = st.calculation_snapshot || {};
     const fmt = (n) => 'R ' + Number(n||0).toLocaleString('en-ZA', { minimumFractionDigits:2, maximumFractionDigits:2 });
     const row = (k, v) => `<tr><td style="padding:6px 0;color:#57534e">${k}</td><td style="padding:6px 0;text-align:right;color:#1c1917">${v}</td></tr>`;
+    const hasSession = snap.session_rate != null;
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Royalty statement ${esc(st.user_name)}</title>
       <style>body{font-family:system-ui,Arial,sans-serif;max-width:640px;margin:40px auto;padding:0 20px;color:#1c1917}
-      h1{font-size:20px;margin:0 0 4px} .muted{color:#78716c;font-size:13px;margin:0 0 20px}
-      table{width:100%;border-collapse:collapse;font-size:14px} .total{border-top:2px solid #e7e5e4;font-weight:700;font-size:16px}
-      .total td{padding-top:12px}</style></head><body>
-      <div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid #e7e5e4;padding-bottom:14px;margin-bottom:18px">
+      .head{display:flex;align-items:center;gap:12px;border-bottom:2px solid #e7e5e4;padding-bottom:14px;margin-bottom:18px}
+      .muted{color:#78716c;font-size:13px;margin:0 0 16px}
+      table{width:100%;border-collapse:collapse;font-size:14px} .sub{font-weight:700;padding-top:14px;color:#1c1917}
+      .total{border-top:2px solid #e7e5e4;font-weight:700;font-size:16px} .total td{padding-top:12px}</style></head><body>
+      <div class="head">
         <img src="https://control.hymndesk.co.za/icons/icon-192x192.png" alt="" style="width:44px;height:44px;border-radius:10px" />
         <div><div style="font-size:18px;font-weight:700">Royalty statement</div><div class="muted" style="margin:0">HymnDesk Control</div></div>
       </div>
       <p class="muted">${esc(st.user_name)} · period ${st.period_start ? esc(st.period_start) + ' to ' : 'up to '}${esc(st.period_end || '')}</p>
       <table>
-        ${row('Royalty percent', Number(st.user_percentage).toFixed(2) + ' percent')}
-        ${row('Sessions attended', st.sessions_attended + ' of ' + st.sessions_total)}
-        ${row('Prorate factor', Number(st.prorate_factor).toFixed(4))}
-        ${row('Pool income in period', fmt(st.pool_income_in_period))}
-        ${row('Base share', fmt(st.base_share))}
-        ${row('Forfeitures', fmt(st.forfeitures_total))}
-        <tr class="total"><td>Final share</td><td style="text-align:right">${fmt(st.final_share)}</td></tr>
+        <tr><td class="sub" colspan="2">Contribution royalty (audio visual)</td></tr>
+        ${row('Contribution percent', Number(snap.contribution_percent||0).toFixed(2) + ' percent')}
+        ${row('Sessions attended', (snap.sessions_attended||0) + ' of ' + (snap.sessions_total||0))}
+        ${row('Prorate factor', Number(snap.prorate_factor||0).toFixed(4))}
+        ${row('Contribution amount', fmt(snap.contribution_amount))}
+        <tr><td class="sub" colspan="2">Incentive royalty</td></tr>
+        ${row('Incentive percent', Number(snap.incentive_percent||0).toFixed(2) + ' percent')}
+        ${row('Status', snap.is_active ? 'Active' : 'Inactive (incentive not paid)')}
+        ${row('Incentive amount', fmt(snap.incentive_amount))}
+        ${hasSession ? `<tr><td class="sub" colspan="2">Session rate</td></tr>${row('Rate per session', fmt(snap.session_rate))}${row('Session pay', fmt(snap.session_pay))}` : ''}
+        ${Number(snap.forfeitures_total||0) > 0 ? row('Forfeitures', fmt(snap.forfeitures_total)) : ''}
+        <tr class="total"><td>Total due</td><td style="text-align:right">${fmt(st.final_share)}</td></tr>
       </table>
       <p class="muted" style="margin-top:30px">Generated from HymnDesk Control</p>
       </body></html>`);
