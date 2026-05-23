@@ -183,7 +183,9 @@
       resultHost.appendChild(table);
 
       if (isFinance()) {
-        resultHost.appendChild(el('div', { class:'mt-4 flex items-center justify-end' },
+        resultHost.appendChild(el('div', { class:'mt-4 flex items-center justify-end gap-2' },
+          el('button', { class:'text-sm border border-stone-300 hover:bg-stone-50 px-4 py-2 rounded-lg',
+            onclick: () => exportRunCsv(statements, start, end) }, 'Export CSV'),
           el('button', { class:'text-sm bg-stone-900 hover:bg-stone-800 text-white px-4 py-2 rounded-lg',
             onclick: (ev) => genAll(statements, end, start, ev.target) }, 'Generate all statements')));
       }
@@ -384,11 +386,14 @@
           ),
           el('div', { class:'text-right' },
             el('div', { class:'text-base font-semibold text-emerald-700' }, money(st.final_share)),
-            isFinance() ? el('button', { class:'text-xs text-red-600 hover:text-red-700 mt-1', onclick: async () => {
-              if (!confirm('Delete this statement?')) return;
-              const { error } = await supabase.rpc('delete_royalty_statement', { p_id: st.id });
-              if (error) toast(error.message, 'error'); else renderStatements(host);
-            }}, 'Delete') : null,
+            el('div', { class:'flex items-center gap-2 justify-end mt-1' },
+              el('button', { class:'text-xs text-brand-600 hover:text-brand-700', onclick: () => exportStatementPdf(st) }, 'PDF'),
+              isFinance() ? el('button', { class:'text-xs text-red-600 hover:text-red-700', onclick: async () => {
+                if (!confirm('Delete this statement?')) return;
+                const { error } = await supabase.rpc('delete_royalty_statement', { p_id: st.id });
+                if (error) toast(error.message, 'error'); else renderStatements(host);
+              }}, 'Delete') : null,
+            ),
           ),
         ),
       ));
@@ -431,6 +436,64 @@
     );
     host.appendChild(card);
   }
+
+  // ----- Exports ----------------------------------------------------------
+  function csvCell(v) {
+    const s = (v == null ? '' : String(v));
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function downloadFile(filename, content, mime) {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+
+  function exportRunCsv(statements, start, end) {
+    const headers = ['Member','Percent','Sessions attended','Sessions total','Prorate factor',
+                     'Pool income','Distributable pool','Base share','Forfeitures','Final share'];
+    const lines = [headers.map(csvCell).join(',')];
+    statements.forEach(s => {
+      lines.push([
+        s.user_name, s.user_percentage, s.sessions_attended, s.sessions_total,
+        s.prorate_factor, s.pool_income, s.distributable_pool, s.base_share,
+        s.forfeitures_total, s.final_share,
+      ].map(csvCell).join(','));
+    });
+    const periodLabel = (start ? start + '_to_' : 'upto_') + (end || 'today');
+    downloadFile(`royalty_run_${periodLabel}.csv`, lines.join('\n'), 'text/csv;charset=utf-8');
+  }
+
+  // Per-statement PDF, opened via the browser print dialog (Save as PDF).
+  function exportStatementPdf(st) {
+    const w = window.open('', '_blank');
+    if (!w) { toast('Allow pop-ups to download the PDF', 'error'); return; }
+    const fmt = (n) => 'R ' + Number(n||0).toLocaleString('en-ZA', { minimumFractionDigits:2, maximumFractionDigits:2 });
+    const row = (k, v) => `<tr><td style="padding:6px 0;color:#57534e">${k}</td><td style="padding:6px 0;text-align:right;color:#1c1917">${v}</td></tr>`;
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Royalty statement ${esc(st.user_name)}</title>
+      <style>body{font-family:system-ui,Arial,sans-serif;max-width:640px;margin:40px auto;padding:0 20px;color:#1c1917}
+      h1{font-size:20px;margin:0 0 4px} .muted{color:#78716c;font-size:13px;margin:0 0 20px}
+      table{width:100%;border-collapse:collapse;font-size:14px} .total{border-top:2px solid #e7e5e4;font-weight:700;font-size:16px}
+      .total td{padding-top:12px}</style></head><body>
+      <h1>Royalty statement</h1>
+      <p class="muted">${esc(st.user_name)} · period ${st.period_start ? esc(st.period_start) + ' to ' : 'up to '}${esc(st.period_end || '')}</p>
+      <table>
+        ${row('Royalty percent', Number(st.user_percentage).toFixed(2) + ' percent')}
+        ${row('Sessions attended', st.sessions_attended + ' of ' + st.sessions_total)}
+        ${row('Prorate factor', Number(st.prorate_factor).toFixed(4))}
+        ${row('Pool income in period', fmt(st.pool_income_in_period))}
+        ${row('Base share', fmt(st.base_share))}
+        ${row('Forfeitures', fmt(st.forfeitures_total))}
+        <tr class="total"><td>Final share</td><td style="text-align:right">${fmt(st.final_share)}</td></tr>
+      </table>
+      <p class="muted" style="margin-top:30px">Generated from HymnDesk Control</p>
+      </body></html>`);
+    w.document.close();
+    setTimeout(() => { w.focus(); w.print(); }, 300);
+  }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
   function tile(label, value, tone) {
     const tones = { green:'text-emerald-700 bg-emerald-50 border-emerald-200' };
