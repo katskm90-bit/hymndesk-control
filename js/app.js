@@ -24,6 +24,7 @@
     { id: 'sessions',     title: 'Production Schedule',         icon: 'film',    roles: null },
     { id: 'hymns',        title: 'Hymns Catalogue',             icon: 'music',   roles: null },
     { id: 'team',         title: 'Team Register',               icon: 'users',   roles: null },
+    { id: 'contracts',    title: 'Contracts',                   icon: 'fileText', roles: null },
     { id: 'royalty',      title: 'Royalty Framework',           icon: 'coins',   roles: ['Admin','Finance','Project Manager','Talent'] },
     { id: 'expenses',     title: 'Member Expenses',             icon: 'receipt', roles: null },
     { id: 'budget',       title: 'Budget Tracker',              icon: 'chart',   roles: ['Admin','Finance','Project Manager'] },
@@ -47,6 +48,7 @@
     film:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/><line x1="3" y1="12" x2="21" y2="12"/></svg>',
     users:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><circle cx="17" cy="8" r="2"/><path d="M21 20c0-2-1.5-3.5-4-4"/></svg>',
     coins:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="9" cy="7" rx="6" ry="3"/><path d="M3 7v6c0 1.7 2.7 3 6 3"/><ellipse cx="15" cy="14" rx="6" ry="3"/><path d="M9 14v6c0 1.7 2.7 3 6 3"/></svg>',
+    fileText:  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h8"/></svg>',
     receipt:   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3v18l3-2 3 2 3-2 3 2 3-2V3"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>',
     chart:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="21" x2="21" y2="21"/><rect x="6" y="11" width="3" height="9"/><rect x="11" y="6" width="3" height="14"/><rect x="16" y="14" width="3" height="6"/></svg>',
     'arrow-up':'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>',
@@ -485,6 +487,12 @@
       main.innerHTML = '';
       const edgeUrl = window.HD_CONFIG.SUPABASE_URL.replace(/\/$/, '') + '/functions/v1/team-admin';
       window.HD_Team.render(main, { supabase: state.supabase, edgeUrl });
+      return;
+    }
+
+    if (mod.id === 'contracts' && window.HD_Contracts) {
+      main.innerHTML = '';
+      window.HD_Contracts.render(main, { supabase: state.supabase });
       return;
     }
 
