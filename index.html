@@ -9,8 +9,10 @@
   <title>HymnDesk Control</title>
 
   <link rel="manifest" href="/manifest.json" />
-  <link rel="icon" href="/icons/icon-192.png" />
-  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16x16.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-180x180.png" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -75,6 +77,7 @@
        ==================================================================== -->
   <div id="boot-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-stone-50">
     <div class="text-center">
+      <img src="/icons/icon-192x192.png" alt="HymnDesk Control" class="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-sm" />
       <div class="text-2xl font-bold text-brand-500 mb-3">HymnDesk Control</div>
       <div class="flex justify-center gap-2">
         <span class="pulse-dot inline-block w-2 h-2 rounded-full bg-brand-500"></span>
@@ -91,6 +94,7 @@
   <div id="auth-screen" hidden class="min-h-screen flex items-center justify-center px-4 py-10">
     <div class="w-full max-w-sm">
       <div class="text-center mb-8">
+        <img src="/icons/icon-192x192.png" alt="HymnDesk Control" class="w-20 h-20 rounded-2xl mx-auto mb-4 shadow-sm" />
         <div class="text-2xl font-bold text-brand-500">HymnDesk Control</div>
         <div class="text-sm text-stone-500 mt-1">Internal project management</div>
       </div>
@@ -194,8 +198,13 @@
     <!-- Sidebar -->
     <aside id="sidebar" class="fixed lg:static z-30 inset-y-0 left-0 w-72 bg-white border-r border-stone-200 flex flex-col">
       <div class="px-5 py-5 border-b border-stone-200">
-        <div class="text-base font-bold text-brand-500">HymnDesk Control</div>
-        <div class="text-xs text-stone-500 mt-0.5">Internal management</div>
+        <div class="flex items-center gap-2.5">
+          <img src="/icons/icon-192x192.png" alt="HymnDesk Control" class="w-9 h-9 rounded-lg shrink-0" />
+          <div>
+            <div class="text-base font-bold text-brand-500 leading-tight">HymnDesk Control</div>
+            <div class="text-xs text-stone-500">Internal management</div>
+          </div>
+        </div>
       </div>
 
       <nav id="sidebar-nav" class="flex-1 overflow-y-auto px-3 py-4 space-y-1 text-sm">
@@ -235,11 +244,8 @@
             </button>
             <h1 id="page-title" class="text-base lg:text-lg font-semibold text-stone-900">Home</h1>
           </div>
-          <div class="flex items-center gap-3">
-            <div id="project-picker"></div>
-            <div class="text-xs text-stone-500">
-              <span id="app-version"></span>
-            </div>
+          <div class="text-xs text-stone-500">
+            <span id="app-version"></span>
           </div>
         </div>
       </header>
@@ -258,26 +264,6 @@
        ==================================================================== -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js"></script>
   <script src="/js/config.js"></script>
-  <script src="/js/project.js"></script>
-  <script src="/js/team.js"></script>
-  <script src="/js/phases.js"></script>
-  <script src="/js/tasks.js"></script>
-  <script src="/js/mytasks.js"></script>
-  <script src="/js/sessions.js"></script>
-  <script src="/js/hymns.js"></script>
-  <script src="/js/budget.js"></script>
-  <script src="/js/income.js"></script>
-  <script src="/js/expenses.js"></script>
-  <script src="/js/royalty.js"></script>
-  <script src="/js/advices.js"></script>
-  <script src="/js/sponsorship.js"></script>
-  <script src="/js/marketing.js"></script>
-  <script src="/js/beta.js"></script>
-  <script src="/js/appdev.js"></script>
-  <script src="/js/founder.js"></script>
-  <script src="/js/risks.js"></script>
-  <script src="/js/agm.js"></script>
-  <script src="/js/dashboard.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>
