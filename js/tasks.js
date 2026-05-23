@@ -313,25 +313,31 @@
       el('h3', { class: 'text-base font-semibold' }, isEdit ? 'Edit task' : 'New task')));
 
     const body = el('div', { class: 'flex-1 overflow-y-auto p-5 space-y-3' });
-    const fTitle = el('input', { type: 'text', required: '', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.title || '' });
-    const fDesc  = el('textarea', { rows: '2', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm' }, existing?.description || '');
-    const fCat = selectFromLookups(categories, existing?.category_lookup_id);
-    const fPri = selectFromLookups(priorities, existing?.priority_lookup_id);
+    // Members editing their own task may change progress only. Managers edit everything.
+    const lockStructural = isEdit && !canManage();
+    const lockAttrs = (e) => { if (lockStructural) { e.setAttribute('disabled', ''); e.className += ' bg-stone-100 text-stone-500 cursor-not-allowed'; } return e; };
+    const fTitle = lockAttrs(el('input', { type: 'text', required: '', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.title || '' }));
+    const fDesc  = lockAttrs(el('textarea', { rows: '2', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm' }, existing?.description || ''));
+    const fCat = lockAttrs(selectFromLookups(categories, existing?.category_lookup_id));
+    const fPri = lockAttrs(selectFromLookups(priorities, existing?.priority_lookup_id));
     const fSta = selectFromLookups(statuses, existing?.status_lookup_id);
-    const fOwn = el('select', { class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white' },
+    const fOwn = lockAttrs(el('select', { class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white' },
       el('option', { value: '' }, 'Unassigned'),
-      ...members.map(m => el('option', { value: m.id, selected: m.id === existing?.owner_user_id ? '' : null }, m.full_name)));
-    const fPh = el('select', { class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white' },
+      ...members.map(m => el('option', { value: m.id, selected: m.id === existing?.owner_user_id ? '' : null }, m.full_name))));
+    const fPh = lockAttrs(el('select', { class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white' },
       el('option', { value: '' }, 'No phase'),
-      ...phases.map(p => el('option', { value: p.id, selected: p.id === existing?.phase_id ? '' : null }, `Phase ${p.sort_order}: ${p.name}`)));
-    const fTarget = el('input', { type: 'date', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.target_date || '' });
+      ...phases.map(p => el('option', { value: p.id, selected: p.id === existing?.phase_id ? '' : null }, `Phase ${p.sort_order}: ${p.name}`))));
+    const fTarget = lockAttrs(el('input', { type: 'date', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.target_date || '' }));
     const fDone   = el('input', { type: 'date', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.done_date || '' });
     const fNotes  = el('textarea', { rows: '2', class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm' }, existing?.notes || '');
-    const fCrit   = el('input', { type: 'checkbox', class: 'rounded', checked: existing?.is_critical ? '' : null });
+    const fCrit   = lockAttrs(el('input', { type: 'checkbox', class: 'rounded', checked: existing?.is_critical ? '' : null }));
     const fBlk    = el('input', { type: 'checkbox', class: 'rounded', checked: existing?.is_blocked  ? '' : null });
     const errBox  = el('div', { class: 'text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3', hidden: '' });
+    const memberHint = lockStructural ? el('div', { class: 'text-xs text-stone-500 bg-stone-50 border border-stone-200 rounded-lg p-2' },
+      'You can update the status, blocked flag, done date, and notes on your task. Other details are set by your Project Manager.') : el('span', { class: 'hidden' });
 
     body.append(
+      memberHint,
       lab('Title', fTitle),
       lab('Description', fDesc),
       el('div', { class: 'grid grid-cols-2 gap-3' }, lab('Category', fCat), lab('Priority', fPri)),
