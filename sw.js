@@ -2,7 +2,7 @@
 // HymnDesk Control · Service Worker
 // ============================================================================
 
-const CACHE_VERSION = 'hdctl-v0.14.0';
+const CACHE_VERSION = 'hdctl-v0.15.0';
 const CORE_ASSETS = [
   '/',
   '/index.html',
@@ -11,6 +11,7 @@ const CORE_ASSETS = [
   '/js/project.js',
   '/js/app.js',
   '/js/team.js',
+  '/js/contracts.js',
   '/js/phases.js',
   '/js/tasks.js',
   '/js/mytasks.js',
