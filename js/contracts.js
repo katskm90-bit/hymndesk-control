@@ -535,7 +535,12 @@
           try {
             const { data, error } = await supabase.storage.from('contracts').createSignedUrl(c.file_path, 120);
             if (error) throw error;
-            window.open(data.signedUrl, '_blank');
+            const resp = await fetch(data.signedUrl);
+            const html = await resp.text();
+            const w = window.open('', '_blank');
+            if (!w) { toast('Allow pop-ups to view the signed copy', 'error'); return; }
+            w.document.write(html);
+            w.document.close();
           } catch (e) { toast('Could not open the signed copy', 'error'); }
         } }, 'Signed copy'));
     }
