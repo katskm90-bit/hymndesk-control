@@ -14,7 +14,7 @@
 (function () {
   'use strict';
   const M = {}; window.HD_Contracts = M;
-  let supabase = null, myUserId = null, myRole = null;
+  let supabase = null, myUserId = null, myRole = null, myFullName = '';
   let members = [], contracts = [];
 
   // ----- helpers ----------------------------------------------------------
@@ -140,11 +140,12 @@
     const { data: { user } } = await supabase.auth.getUser();
     myUserId = user.id;
     const [pRes, mRes, cRes] = await Promise.all([
-      supabase.from('users').select('role:roles(name)').eq('id', user.id).maybeSingle(),
+      supabase.from('users').select('full_name, role:roles(name)').eq('id', user.id).maybeSingle(),
       supabase.rpc('list_team_members'),
       supabase.rpc('list_contracts', { p_project_id: projectId() }),
     ]);
     myRole = pRes.data?.role?.name || null;
+    myFullName = pRes.data?.full_name || '';
     members = mRes.error ? [] : (mRes.data || []);
     contracts = cRes.error ? [] : (cRes.data || []);
   }
@@ -165,11 +166,16 @@
   }
 
   // ----- List view --------------------------------------------------------
+  function statusLabel(s) {
+    return ({ Draft:'Draft', Sent:'Awaiting member', MemberSigned:'Awaiting company', Signed:'Signed', Returned:'Returned to member' })[s] || s || 'Draft';
+  }
   function statusPill(s) {
     const map = { Draft:'text-stone-600 bg-stone-100 border-stone-200',
                   Sent:'text-amber-700 bg-amber-50 border-amber-200',
+                  MemberSigned:'text-blue-700 bg-blue-50 border-blue-200',
+                  Returned:'text-red-700 bg-red-50 border-red-200',
                   Signed:'text-emerald-700 bg-emerald-50 border-emerald-200' };
-    return el('span', { class:`inline-flex items-center text-xs font-medium border rounded-full px-2 py-0.5 ${map[s]||map.Draft}` }, s || 'Draft');
+    return el('span', { class:`inline-flex items-center text-xs font-medium border rounded-full px-2 py-0.5 ${map[s]||map.Draft}` }, statusLabel(s));
   }
 
   function renderList() {
@@ -191,7 +197,7 @@
     }
 
     // For a member, surface any contract awaiting their signature at the top
-    const myPending = contracts.filter(c => c.user_id === myUserId && c.status !== 'Signed');
+    const myPending = contracts.filter(c => c.user_id === myUserId && (c.status === 'Sent' || c.status === 'Returned'));
     if (!isPmOrAdmin() && myPending.length > 0) {
       const banner = el('div', { class:'bg-brand-50 border-2 border-brand-200 rounded-xl p-4 flex items-center justify-between gap-3' },
         el('div', null,
@@ -204,7 +210,7 @@
 
     const list = el('div', { class:'space-y-2' });
     contracts.forEach(c => {
-      const awaitingMe = c.user_id === myUserId && c.status !== 'Signed';
+      const awaitingMe = c.user_id === myUserId && (c.status === 'Sent' || c.status === 'Returned');
       list.appendChild(el('div', { class:`bg-white border rounded-xl p-4 flex items-center justify-between gap-3 ${awaitingMe ? 'border-brand-300' : 'border-stone-200'}` },
         el('div', { class:'min-w-0' },
           el('div', { class:'font-medium text-stone-900 truncate' }, c.full_name),
@@ -430,11 +436,21 @@
     // Signing area: shown to the member named on the contract when it is not
     // yet signed. Both tick boxes are required before the Sign button activates.
     const isMine = c.user_id === myUserId;
-    if (isMine && c.status !== 'Signed') {
+
+    // If the contract was returned, show the reason prominently
+    if (c.status === 'Returned' && c.returned_reason) {
+      body.appendChild(el('div', { class:'mt-5 border-2 border-red-200 bg-red-50 rounded-xl p-4' },
+        el('div', { class:'font-semibold text-red-800' }, 'Returned for changes'),
+        el('div', { class:'text-sm text-red-700 mt-1' }, c.returned_reason),
+        el('div', { class:'text-xs text-red-600 mt-2' }, isMine ? 'Please edit the contract if needed, then sign again below.' : 'Waiting for the member to amend and sign again.')));
+    }
+
+    // MEMBER signing area: only when it is the member's turn (Sent or Returned)
+    if (isMine && (c.status === 'Sent' || c.status === 'Returned')) {
       const signBox = el('div', { class:'mt-5 border-2 border-brand-200 bg-brand-50 rounded-xl p-4 space-y-3' });
       signBox.appendChild(el('div', { class:'font-semibold text-stone-900' }, 'Sign this contract'));
       signBox.appendChild(el('div', { class:'text-xs text-stone-600' },
-        'Signing electronically has the same legal effect as a handwritten signature, under the Electronic Communications and Transactions Act 25 of 2002. Your full name, the place, and the date and time are recorded.'));
+        'Signing electronically has the same legal effect as a handwritten signature, under the Electronic Communications and Transactions Act 25 of 2002. Once you sign, your contract goes to the Project Manager and the Founder for their signatures.'));
 
       const fSignName = el('input', { type:'text', class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', placeholder:'Type your full name', value: c.full_name || '' });
       const fSignPlace = el('input', { type:'text', class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', placeholder:'e.g. Johannesburg' });
@@ -468,39 +484,107 @@
         if (signBtn.disabled) return;
         signErr.hidden = true; signBtn.disabled = true; signBtn.textContent = 'Signing...';
         try {
-          // Snapshot exactly what they agreed to: the stored body plus the agreed terms
           const snapshot = {
-            contract_body: c.contract_body,
-            annexure_expenses: c.annexure_expenses,
-            contribution_percent: c.contribution_percent,
-            incentive_percent: c.incentive_percent,
-            session_rate: c.session_rate,
-            role_name: c.role_name,
-            agreed_contract: true,
-            agreed_nda: true,
+            contract_body: c.contract_body, annexure_expenses: c.annexure_expenses,
+            contribution_percent: c.contribution_percent, incentive_percent: c.incentive_percent,
+            session_rate: c.session_rate, role_name: c.role_name,
+            agreed_contract: true, agreed_nda: true,
           };
           const { error } = await supabase.rpc('sign_contract', {
-            p_contract_id: c.id,
-            p_signed_name: fSignName.value.trim(),
-            p_signed_place: fSignPlace.value.trim(),
-            p_signed_snapshot: snapshot,
+            p_contract_id: c.id, p_signed_name: fSignName.value.trim(),
+            p_signed_place: fSignPlace.value.trim(), p_signed_snapshot: snapshot,
           });
           if (error) throw error;
-          // Build a signed copy of the contract object and store it as a file
-          const signedCopy = Object.assign({}, c, {
-            status: 'Signed',
-            signed_full_name: fSignName.value.trim(),
-            signed_place: fSignPlace.value.trim(),
-            signed_at: new Date().toISOString(),
-          });
-          await storeSignedContractFile(signedCopy);
-          toast('Contract signed', 'success');
+          // No file stored yet: the signed copy is produced only when fully signed.
+          toast('Signed. Sent to the company for signature.', 'success');
           overlay.remove(); reload();
         } catch (err) { signErr.textContent = err.message || 'Could not sign'; signErr.hidden = false;
           signBtn.disabled = false; signBtn.textContent = 'Sign contract'; refreshSignState(); }
       });
 
       body.appendChild(signBox);
+    }
+
+    // COMPANY signing area: PM or Founder signs after the member, with a Return option
+    if (isPmOrAdmin() && c.status === 'MemberSigned') {
+      const iAmPm = myRole === 'Project Manager';
+      const myDesignation = iAmPm ? 'Project Manager' : 'Founder';
+      const alreadySigned = iAmPm ? c.pm_signed_at : c.founder_signed_at;
+
+      const compBox = el('div', { class:'mt-5 border-2 border-blue-200 bg-blue-50 rounded-xl p-4 space-y-3' });
+      compBox.appendChild(el('div', { class:'font-semibold text-stone-900' }, 'Company signature'));
+      compBox.appendChild(el('div', { class:'text-xs text-stone-600' },
+        `The member has signed. Signing here approves the contract and its Annexure A expenses as the ${myDesignation}. Both the Project Manager and the Founder must sign for the contract to become valid.`));
+
+      // Show who has and has not signed yet
+      const sigState = el('div', { class:'text-xs text-stone-600 space-y-0.5' },
+        el('div', null, `Project Manager: ${c.pm_signed_name ? 'signed ' + fmtDate(c.pm_signed_at) : 'not yet signed'}`),
+        el('div', null, `Founder: ${c.founder_signed_name ? 'signed ' + fmtDate(c.founder_signed_at) : 'not yet signed'}`));
+      compBox.appendChild(sigState);
+
+      if (alreadySigned) {
+        compBox.appendChild(el('div', { class:'text-sm text-emerald-700 font-medium' }, `You have signed as ${myDesignation}. Waiting for the other signature.`));
+      } else {
+        const fCompName = el('input', { type:'text', class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', placeholder:'Type your full name', value: myFullName || '' });
+        const tickApprove = el('input', { type:'checkbox', class:'rounded mt-0.5' });
+        const compBtn = el('button', { class:'w-full px-4 py-2.5 text-sm rounded-lg bg-stone-300 text-stone-500 font-medium cursor-not-allowed', disabled:'' }, `Sign as ${myDesignation}`);
+        const compErr = el('div', { class:'text-sm text-red-600', hidden:'' });
+        function refreshComp() {
+          const ok = tickApprove.checked && fCompName.value.trim();
+          compBtn.disabled = !ok;
+          compBtn.className = ok ? 'w-full px-4 py-2.5 text-sm rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium'
+                                 : 'w-full px-4 py-2.5 text-sm rounded-lg bg-stone-300 text-stone-500 font-medium cursor-not-allowed';
+        }
+        tickApprove.addEventListener('change', refreshComp);
+        fCompName.addEventListener('input', refreshComp);
+
+        compBox.append(
+          lab('Full name', fCompName),
+          el('label', { class:'flex items-start gap-2 text-sm text-stone-700' }, tickApprove,
+            el('span', null, `I approve this contract and its Annexure A expenses, and sign as ${myDesignation}.`)),
+          compErr, compBtn);
+
+        compBtn.addEventListener('click', async () => {
+          if (compBtn.disabled) return;
+          compErr.hidden = true; compBtn.disabled = true; compBtn.textContent = 'Signing...';
+          try {
+            const { data, error } = await supabase.rpc('company_sign_contract', { p_contract_id: c.id, p_signed_name: fCompName.value.trim() });
+            if (error) throw error;
+            if (data && data.fully_signed) {
+              // Build the fully signed copy and store it now
+              const signedCopy = Object.assign({}, c, {
+                status: 'Signed',
+                pm_signed_name: iAmPm ? fCompName.value.trim() : c.pm_signed_name,
+                pm_signed_at: iAmPm ? new Date().toISOString() : c.pm_signed_at,
+                founder_signed_name: iAmPm ? c.founder_signed_name : fCompName.value.trim(),
+                founder_signed_at: iAmPm ? c.founder_signed_at : new Date().toISOString(),
+                fully_signed_at: new Date().toISOString(),
+              });
+              await storeSignedContractFile(signedCopy);
+              toast('Contract fully signed and valid', 'success');
+            } else {
+              toast(`Signed as ${myDesignation}. Waiting for the other signature.`, 'success');
+            }
+            overlay.remove(); reload();
+          } catch (err) { compErr.textContent = err.message || 'Could not sign'; compErr.hidden = false;
+            compBtn.disabled = false; compBtn.textContent = `Sign as ${myDesignation}`; refreshComp(); }
+        });
+      }
+
+      // Return to member action
+      const returnBtn = el('button', { class:'w-full px-4 py-2 text-sm rounded-lg border border-red-300 text-red-700 hover:bg-red-50 font-medium' }, 'Return to member for changes');
+      returnBtn.addEventListener('click', async () => {
+        const reason = prompt('Reason for returning this contract to the member (for example, an expense to remove or a receipt needed):');
+        if (reason == null) return;
+        if (!reason.trim()) { toast('A reason is required', 'error'); return; }
+        try {
+          const { error } = await supabase.rpc('return_contract', { p_contract_id: c.id, p_reason: reason.trim() });
+          if (error) throw error;
+          toast('Returned to the member', 'success'); overlay.remove(); reload();
+        } catch (err) { toast(err.message || 'Could not return', 'error'); }
+      });
+      compBox.appendChild(returnBtn);
+      body.appendChild(compBox);
     }
 
     dialog.appendChild(body);
@@ -510,7 +594,7 @@
     // Admin and PM management actions on the left
     if (isPmOrAdmin()) {
       const left = el('div', { class:'mr-auto flex items-center gap-2' });
-      if (c.status !== 'Signed') {
+      if (['Draft','Sent','Returned'].includes(c.status)) {
         left.appendChild(el('button', { class:'text-sm border border-stone-300 hover:bg-stone-50 px-4 py-2 rounded-lg',
           onclick: () => { overlay.remove(); openDraft(c); } }, 'Edit'));
       }
@@ -606,13 +690,24 @@
       el('span', null, e.amount != null ? money(e.amount) : '—'))));
     wrap.appendChild(annex);
 
-    // Signature state
+    // Signature state, all three parties
     if (c.status === 'Signed') {
-      wrap.appendChild(el('div', { class:'bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-emerald-800' },
-        el('div', { class:'font-medium' }, 'Signed'),
-        el('div', { class:'text-xs' }, `${c.signed_full_name} at ${c.signed_place || 'unspecified place'} on ${fmtDate(c.signed_at)}`)));
+      wrap.appendChild(el('div', { class:'bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-emerald-800 space-y-1' },
+        el('div', { class:'font-medium' }, 'Fully signed and valid'),
+        el('div', { class:'text-xs' }, `Member: ${c.signed_full_name} at ${c.signed_place || 'unspecified place'} on ${fmtDate(c.signed_at)}`),
+        el('div', { class:'text-xs' }, `Project Manager: ${c.pm_signed_name || '—'}${c.pm_signed_at ? ' on ' + fmtDate(c.pm_signed_at) : ''}`),
+        el('div', { class:'text-xs' }, `Founder: ${c.founder_signed_name || '—'}${c.founder_signed_at ? ' on ' + fmtDate(c.founder_signed_at) : ''}`),
+        el('div', { class:'text-xs font-medium mt-1' }, `Official date: ${fmtDate(c.fully_signed_at || c.signed_at)}`)));
+    } else if (c.status === 'MemberSigned') {
+      wrap.appendChild(el('div', { class:'bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-800 space-y-1' },
+        el('div', { class:'font-medium' }, 'Signed by the member, awaiting company signatures'),
+        el('div', { class:'text-xs' }, `Member: ${c.signed_full_name} at ${c.signed_place || 'unspecified place'} on ${fmtDate(c.signed_at)}`),
+        el('div', { class:'text-xs' }, `Project Manager: ${c.pm_signed_name ? c.pm_signed_name + ' on ' + fmtDate(c.pm_signed_at) : 'not yet signed'}`),
+        el('div', { class:'text-xs' }, `Founder: ${c.founder_signed_name ? c.founder_signed_name + ' on ' + fmtDate(c.founder_signed_at) : 'not yet signed'}`)));
+    } else if (c.status === 'Returned') {
+      wrap.appendChild(el('div', { class:'text-xs text-red-600' }, 'Returned to the member for changes. Signatures have been cleared.'));
     } else {
-      wrap.appendChild(el('div', { class:'text-xs text-stone-500' }, 'Not yet signed. Signing is done in app by the member.'));
+      wrap.appendChild(el('div', { class:'text-xs text-stone-500' }, 'Not yet signed. The member signs first, then the Project Manager and the Founder.'));
     }
     return wrap;
   }
@@ -639,12 +734,17 @@
     const gnum = hasRate ? 10 : 9;
 
     const signedBlock = c.status === 'Signed'
-      ? `<div class="box"><b>Signed electronically by the Contractor</b><br/>${esc(c.signed_full_name)} at ${esc(c.signed_place||'unspecified place')} on ${esc(fmtDate(c.signed_at))}.<br/>
-         This electronic signature has the same legal effect as a handwritten signature, in accordance with the Electronic Communications and Transactions Act 25 of 2002.</div>`
+      ? `<div class="box">
+           <b>This agreement has been signed electronically by all parties</b><br/><br/>
+           <b>Contractor:</b> ${esc(c.signed_full_name)} at ${esc(c.signed_place||'unspecified place')} on ${esc(fmtDate(c.signed_at))}.<br/>
+           <b>Project Manager:</b> ${esc(c.pm_signed_name||'')} on ${esc(fmtDate(c.pm_signed_at))}.<br/>
+           <b>Founder:</b> ${esc(c.founder_signed_name||'')} on ${esc(fmtDate(c.founder_signed_at))}.<br/><br/>
+           Official date of agreement: ${esc(fmtDate(c.fully_signed_at||c.signed_at))}.<br/>
+           These electronic signatures have the same legal effect as handwritten signatures, in accordance with the Electronic Communications and Transactions Act 25 of 2002.</div>`
       : `<table class="sig"><tr>
-           <td><b>Signed for ${esc(COMPANY.name)}</b><br/><br/>Signature: ____________________<br/>Name: ${esc(COMPANY.rep)}<br/>Capacity: ${esc(COMPANY.repRole)}<br/>Date: ____________</td>
            <td><b>Signed by the Contractor</b><br/><br/>Signature: ____________________<br/>Name: ${esc(c.full_name)}<br/>Place: ____________<br/>Date: ____________</td>
-         </tr></table>`;
+           <td><b>Signed by the Project Manager</b><br/><br/>Signature: ____________________<br/>Name: ____________________<br/>Date: ____________</td>
+         </tr><tr><td colspan="2" style="padding-top:14px"><b>Signed by the Founder</b><br/><br/>Signature: ____________________ &nbsp; Name: ${esc(COMPANY.rep)} &nbsp; Date: ____________</td></tr></table>`;
 
     return `<!doctype html><html><head><meta charset="utf-8"><title>Contract ${esc(c.full_name)}</title>
       <style>
