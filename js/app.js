@@ -322,10 +322,14 @@
     renderProjectPicker();
     renderSidebar();
 
+    // Notifications bell in the header
+    if (window.HD_Notifications) window.HD_Notifications.mount({ supabase: state.supabase });
+
     // Re-render the current page whenever the active project changes
     if (window.HD_Project && !state._projectListenerWired) {
       window.HD_Project.onChange(() => {
         renderProjectPicker();
+        if (window.HD_Notifications) window.HD_Notifications.refresh();
         handleRouteChange();
       });
       state._projectListenerWired = true;
@@ -453,6 +457,7 @@
     $('page-title').textContent = mod.title;
     highlightActive(mod.id);
     renderModulePlaceholder(mod);
+    if (window.HD_Notifications) window.HD_Notifications.refresh();
 
     // Close mobile sidebar after navigation
     $('sidebar').classList.remove('open');
