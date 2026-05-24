@@ -445,6 +445,53 @@
         el('div', { class:'text-xs text-red-600 mt-2' }, isMine ? 'Please edit the contract if needed, then sign again below.' : 'Waiting for the member to amend and sign again.')));
     }
 
+    // ANNEXURE A expenses: editable by the member (their own) or PM/Admin while
+    // the contract is Draft, Sent, or Returned. Locked once the member signs.
+    const canEditExpenses = (isMine || isPmOrAdmin()) && ['Draft','Sent','Returned'].includes(c.status);
+    if (canEditExpenses) {
+      const expBox = el('div', { class:'mt-5 border border-stone-200 bg-white rounded-xl p-4 space-y-3' });
+      expBox.appendChild(el('div', { class:'font-semibold text-stone-900' }, 'Annexure A: your expenses'));
+      expBox.appendChild(el('div', { class:'text-xs text-stone-600' },
+        isMine ? 'Add the expenses you have agreed for this engagement. The Project Manager and the Founder approve these when they sign. Once you sign, these are locked unless the contract is returned to you.'
+               : 'These expenses belong to the member. You may amend them if needed while the contract is not yet signed by the member.'));
+
+      const rowsHost = el('div', { class:'space-y-2' });
+      function addRow(desc='', notes='', amount='') {
+        const d = el('input', { type:'text', class:'rounded-lg border border-stone-300 px-2 py-1.5 text-sm', placeholder:'Description', value:desc });
+        const n = el('input', { type:'text', class:'rounded-lg border border-stone-300 px-2 py-1.5 text-sm', placeholder:'Notes', value:notes });
+        const a = el('input', { type:'number', step:'0.01', class:'rounded-lg border border-stone-300 px-2 py-1.5 text-sm', placeholder:'Amount', value:amount });
+        const row = el('div', { class:'grid grid-cols-[1fr_1fr_90px_28px] gap-2 items-center' }, d, n, a,
+          el('button', { class:'text-stone-400 hover:text-red-600 text-sm', onclick:()=>row.remove() }, '×'));
+        row._get = () => ({ description:d.value.trim(), notes:n.value.trim(), amount: a.value === '' ? null : Number(a.value) });
+        rowsHost.appendChild(row);
+      }
+      const existingRows = c.annexure_expenses || [];
+      if (existingRows.length === 0) addRow();
+      else existingRows.forEach(r => addRow(r.description || '', r.notes || '', r.amount ?? ''));
+
+      const saveExpBtn = el('button', { class:'text-sm bg-stone-900 hover:bg-stone-800 text-white px-4 py-2 rounded-lg' }, 'Save expenses');
+      const expErr = el('div', { class:'text-sm text-red-600', hidden:'' });
+      saveExpBtn.addEventListener('click', async () => {
+        expErr.hidden = true; saveExpBtn.disabled = true; saveExpBtn.textContent = 'Saving...';
+        try {
+          const rows = Array.from(rowsHost.children).map(r => r._get()).filter(x => x.description);
+          const { error } = await supabase.rpc('update_contract_expenses', { p_contract_id: c.id, p_annexure_expenses: rows });
+          if (error) throw error;
+          toast('Expenses saved', 'success');
+          overlay.remove(); openContract(c.id);
+        } catch (err) { expErr.textContent = err.message || 'Could not save'; expErr.hidden = false;
+          saveExpBtn.disabled = false; saveExpBtn.textContent = 'Save expenses'; }
+      });
+
+      expBox.append(
+        rowsHost,
+        el('div', { class:'flex items-center justify-between' },
+          el('button', { class:'text-xs text-brand-600 hover:text-brand-700', onclick:()=>addRow() }, '+ Add expense'),
+          saveExpBtn),
+        expErr);
+      body.appendChild(expBox);
+    }
+
     // MEMBER signing area: only when it is the member's turn (Sent or Returned)
     if (isMine && (c.status === 'Sent' || c.status === 'Returned')) {
       const signBox = el('div', { class:'mt-5 border-2 border-brand-200 bg-brand-50 rounded-xl p-4 space-y-3' });
