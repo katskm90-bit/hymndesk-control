@@ -15,6 +15,7 @@
   let myRole = null;
   let myUserId = null;
   let expenses = [];
+  let receiptCounts = {};
   let phases = [];
   let summary = null;
   let filterStatus = '';
@@ -48,15 +49,18 @@
     const { data: prof } = await supabase.from('users').select('role:roles(name)').eq('id', user.id).maybeSingle();
     myRole = prof?.role?.name || null;
     const pid = projectId();
-    const [eRes, phRes, sumRes] = await Promise.all([
+    const [eRes, phRes, sumRes, rcRes] = await Promise.all([
       supabase.rpc('list_expenses', { p_project_id: pid, p_status: filterStatus || null, p_mine_only: mineOnly }),
       supabase.rpc('list_phases', { p_project_id: pid }),
       supabase.rpc('expense_summary', { p_project_id: pid }),
+      supabase.rpc('expense_receipt_counts', { p_project_id: pid }),
     ]);
     if (eRes.error) throw eRes.error;
     expenses = eRes.data || [];
     phases   = phRes.data || [];
     summary  = sumRes.data || null;
+    receiptCounts = {};
+    if (!rcRes.error) (rcRes.data || []).forEach(r => { receiptCounts[r.expense_id] = r.receipt_count; });
   }
 
   M.render = function (container, opts) {
@@ -159,6 +163,7 @@
         el('div', { class:'text-right' },
           el('div', { class:'text-base font-semibold text-stone-900' }, money(e.amount)),
           el('div', { class:'mt-1' }, statusPill(e.status)),
+          receiptCounts[e.id] ? el('div', { class:'text-xs text-stone-500 mt-1' }, `${receiptCounts[e.id]} receipt${receiptCounts[e.id] > 1 ? 's' : ''}`) : null,
         ),
       ),
     );
@@ -240,18 +245,88 @@
     const fPhase = el('select', { class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white' },
       el('option', { value:'' }, 'No phase'),
       ...phases.map(p => el('option', { value:p.id, selected: p.id === existing?.phase_id ? '' : null }, `Phase ${p.sort_order}: ${p.name}`)));
-    const fReceipt = el('input', { type:'text', class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.receipt_file_path || '', placeholder:'Link to receipt (optional)' });
+    const fReceipt = el('input', { type:'text', class:'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm', value: existing?.receipt_file_path || '', placeholder:'Optional external link' });
     const errBox = el('div', { class:'text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3', hidden:'' });
+
+    // Receipts section: upload and list. Available once the claim exists.
+    const receiptsHost = el('div', { class:'space-y-2' });
+    const ALLOWED = ['image/jpeg','image/png','image/gif','image/webp','application/pdf',
+      'application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    const MAX_BYTES = 30 * 1024 * 1024;
+
+    async function loadReceipts() {
+      receiptsHost.innerHTML = '';
+      if (!existing) {
+        receiptsHost.appendChild(el('div', { class:'text-xs text-stone-500' }, 'Save the claim first, then reopen it to attach receipts.'));
+        return;
+      }
+      let rows = [];
+      try { const { data, error } = await supabase.rpc('list_expense_receipts', { p_expense_id: existing.id }); if (error) throw error; rows = data || []; }
+      catch (e) { receiptsHost.appendChild(el('div', { class:'text-xs text-red-600' }, 'Could not load receipts')); return; }
+
+      if (rows.length === 0) receiptsHost.appendChild(el('div', { class:'text-xs text-stone-500' }, 'No receipts attached yet.'));
+      rows.forEach(r => {
+        receiptsHost.appendChild(el('div', { class:'flex items-center justify-between gap-2 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2' },
+          el('button', { class:'text-sm text-brand-600 hover:text-brand-700 truncate text-left', onclick: () => viewReceipt(r.file_path) }, r.file_name),
+          el('button', { class:'text-stone-400 hover:text-red-600 text-sm shrink-0', onclick: async () => {
+            if (!confirm('Remove this receipt?')) return;
+            try {
+              await supabase.storage.from('receipts').remove([r.file_path]);
+              const { error } = await supabase.rpc('delete_expense_receipt', { p_id: r.id });
+              if (error) throw error;
+              toast('Receipt removed', 'success'); loadReceipts();
+            } catch (e) { toast(e.message || 'Could not remove', 'error'); }
+          } }, '×'),
+        ));
+      });
+    }
+
+    async function viewReceipt(path) {
+      try {
+        const { data, error } = await supabase.storage.from('receipts').createSignedUrl(path, 120);
+        if (error) throw error;
+        window.open(data.signedUrl, '_blank');
+      } catch (e) { toast('Could not open receipt', 'error'); }
+    }
+
+    const fileInput = el('input', { type:'file', accept:'image/*,.pdf,.doc,.docx', class:'hidden' });
+    const uploadBtn = el('button', { class:'text-xs px-3 py-1.5 rounded-lg border border-stone-300 hover:bg-stone-50', onclick: () => fileInput.click() }, 'Attach a receipt');
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      if (file.size > MAX_BYTES) { toast('File is larger than 30 MB', 'error'); fileInput.value=''; return; }
+      if (ALLOWED.length && !ALLOWED.includes(file.type) && file.type) { toast('Use an image, PDF, or Word file', 'error'); fileInput.value=''; return; }
+      uploadBtn.disabled = true; uploadBtn.textContent = 'Uploading...';
+      try {
+        const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = `${myUserId}/${existing.id}-${Date.now()}-${safe}`;
+        const { error: upErr } = await supabase.storage.from('receipts').upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+        if (upErr) throw upErr;
+        const { error } = await supabase.rpc('add_expense_receipt', {
+          p_expense_id: existing.id, p_file_path: path, p_file_name: file.name,
+          p_file_type: file.type || null, p_file_size: file.size,
+        });
+        if (error) throw error;
+        toast('Receipt attached', 'success'); loadReceipts();
+      } catch (e) { toast(e.message || 'Upload failed', 'error'); }
+      finally { uploadBtn.disabled = false; uploadBtn.textContent = 'Attach a receipt'; fileInput.value=''; }
+    });
 
     body.append(
       el('div', { class:'grid grid-cols-2 gap-3' }, lab('Date', fDate), lab('Amount (R)', fAmount)),
       lab('Description', fDesc),
       el('div', { class:'grid grid-cols-2 gap-3' }, lab('Category', fCategory), lab('Phase', fPhase)),
-      lab('Receipt link', fReceipt),
-      el('div', { class:'text-xs text-stone-500' }, 'New claims start as "Claimed". Finance reviews and approves or rejects.'),
+      el('div', null,
+        el('div', { class:'flex items-center justify-between mb-1' },
+          el('label', { class:'block text-sm font-medium text-stone-700' }, 'Receipts'),
+          uploadBtn),
+        receiptsHost, fileInput),
+      lab('External link (optional)', fReceipt),
+      el('div', { class:'text-xs text-stone-500' }, 'New claims start as "Claimed". Finance reviews and approves or rejects. You can attach more than one receipt, up to 30 MB each.'),
       errBox,
     );
     dialog.appendChild(body);
+    loadReceipts();
 
     const submitBtn = el('button', { class:'px-4 py-2 text-sm rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium' }, isEdit ? 'Save' : 'Submit claim');
     submitBtn.addEventListener('click', async () => {
