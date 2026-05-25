@@ -17,6 +17,7 @@
   let supabase = null;
   let sessions = [];
   let members  = [];
+  let inventory = [];
   let statuses = [];
   let books    = [];
   let myRole = null;
@@ -38,8 +39,9 @@
     t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 3500);
   }
   function canManage() { return ['Admin','Project Manager','Director / Producer'].includes(myRole); }
-  function canManageEquipment() { return ['Admin','Project Manager','Director / Producer','Videography / Editing Lead'].includes(myRole); }
+  function canManageEquipment() { return ['Admin','Project Manager','Director / Producer'].includes(myRole); }
   function fmtDate(d) { return d ? new Date(d).toLocaleDateString('en-ZA', { year:'numeric', month:'short', day:'numeric' }) : '—'; }
+  function fmtDateTime(d) { return d ? new Date(d).toLocaleString('en-ZA', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : ''; }
   function fmtTime(t) { return t ? t.slice(0,5) : '—'; }
 
   async function loadAll() {
@@ -47,17 +49,19 @@
     const { data: prof } = await supabase.from('users').select('role:roles(name)').eq('id', user.id).maybeSingle();
     myRole = prof?.role?.name || null;
     const projectId = window.HD_Project ? window.HD_Project.getId() : null;
-    const [sRes, mRes, stRes, bRes] = await Promise.all([
+    const [sRes, mRes, stRes, bRes, invRes] = await Promise.all([
       supabase.rpc('list_sessions', { p_project_id: projectId }),
       supabase.from('users').select('id, full_name').eq('is_active', true).order('full_name'),
       supabase.from('lookups').select('id, value, sort_order').eq('domain','workflow_state').eq('is_active',true).order('sort_order'),
       supabase.from('books').select('id, name, language_id, sort_order, is_active').eq('is_active',true).order('sort_order'),
+      supabase.rpc('list_inventory', { p_project_id: projectId }),
     ]);
     if (sRes.error) throw sRes.error;
     sessions = sRes.data || [];
     members  = mRes.data || [];
     statuses = stRes.data || [];
     books    = bRes.data || [];
+    inventory = invRes.error ? [] : (invRes.data || []);
   }
 
   M.render = function (container, opts) {
@@ -423,33 +427,35 @@
   }
 
   async function renderEquipment(s, body) {
-    const { data, error } = await supabase.from('session_equipment')
-      .select('id, item_name, quantity, checked, notes')
-      .eq('session_id', s.id).order('item_name');
+    const { data, error } = await supabase.rpc('list_session_equipment', { p_session_id: s.id });
     if (error) { body.innerHTML = ''; body.appendChild(el('div', { class: 'text-sm text-red-600' }, error.message)); return; }
     body.innerHTML = '';
 
     const items = data || [];
     if (items.length === 0) {
-      body.appendChild(el('div', { class: 'text-sm text-stone-500 text-center py-6' }, 'No equipment items yet.'));
+      body.appendChild(el('div', { class: 'text-sm text-stone-500 text-center py-6' }, 'No equipment selected for this session yet.'));
     } else {
       const list = el('div', { class: 'border border-stone-200 rounded-xl divide-y divide-stone-100' });
       items.forEach(it => {
-        const cb = el('input', { type: 'checkbox', class: 'rounded', checked: it.checked ? '' : null, disabled: canManageEquipment() ? null : '' });
+        const cb = el('input', { type: 'checkbox', class: 'rounded mt-0.5', checked: it.checked ? '' : null, disabled: canManageEquipment() ? null : '' });
         cb.addEventListener('change', async () => {
           const { error } = await supabase.rpc('upsert_equipment_item', {
-            p_id: it.id, p_session_id: s.id, p_item_name: it.item_name, p_quantity: it.quantity, p_checked: cb.checked, p_notes: it.notes,
+            p_id: it.id, p_session_id: s.id, p_item_name: it.item_name, p_quantity: it.quantity,
+            p_checked: cb.checked, p_notes: it.notes, p_inventory_item_id: it.inventory_item_id,
           });
           if (error) { toast(error.message || 'Failed', 'error'); cb.checked = it.checked; }
           else renderEquipment(s, body);
         });
-        list.appendChild(el('div', { class: 'flex items-center gap-3 px-3 py-2' },
+        const sub = [`Qty ${it.quantity}`];
+        if (it.notes) sub.push(it.notes);
+        if (it.checked && it.checked_by_name) sub.push(`Ticked by ${it.checked_by_name}` + (it.checked_at ? ' on ' + fmtDateTime(it.checked_at) : ''));
+        list.appendChild(el('div', { class: 'flex items-start gap-3 px-3 py-2' },
           cb,
           el('div', { class: 'flex-1 min-w-0' },
             el('div', { class: `text-sm ${it.checked ? 'text-stone-400 line-through' : 'text-stone-900'}` }, it.item_name),
-            el('div', { class: 'text-xs text-stone-500' }, `Qty ${it.quantity}` + (it.notes ? ' · ' + it.notes : '')),
+            el('div', { class: 'text-xs text-stone-500' }, sub.join(' · ')),
           ),
-          canManageEquipment() ? el('button', { class: 'text-xs text-red-600', onclick: async () => {
+          canManageEquipment() ? el('button', { class: 'text-xs text-red-600 shrink-0', onclick: async () => {
             if (!confirm('Remove this item?')) return;
             const { error } = await supabase.rpc('delete_equipment_item', { p_id: it.id });
             if (error) toast(error.message || 'Failed', 'error'); else renderEquipment(s, body);
@@ -460,18 +466,27 @@
     }
 
     if (canManageEquipment()) {
-      const addBar = el('div', { class: 'mt-4 flex items-center gap-2' });
-      const fName = el('input', { type: 'text', placeholder: 'New item name', class: 'flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm' });
-      const fQty  = el('input', { type: 'number', placeholder: 'Qty', value: 1, class: 'w-20 rounded-lg border border-stone-300 px-3 py-2 text-sm' });
-      const btn = el('button', { class: 'text-sm bg-brand-500 hover:bg-brand-600 text-white px-3 py-1.5 rounded-lg', onclick: async () => {
-        if (!fName.value.trim()) return;
+      const addWrap = el('div', { class: 'mt-4 space-y-2' });
+      addWrap.appendChild(el('div', { class: 'text-sm font-medium text-stone-700' }, 'Add equipment from the inventory'));
+      const fItem = el('select', { class: 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white' },
+        el('option', { value: '' }, inventory.length ? 'Select an item from inventory' : 'No inventory items available'),
+        ...inventory.map(i => el('option', { value: i.id }, i.name + (i.category ? ' (' + i.category + ')' : ''))));
+      const fQty  = el('input', { type: 'number', min: '1', placeholder: 'Qty', value: 1, class: 'w-24 rounded-lg border border-stone-300 px-3 py-2 text-sm' });
+      const fNote = el('input', { type: 'text', placeholder: 'Note (optional)', class: 'flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm' });
+      const btn = el('button', { class: 'text-sm bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg shrink-0', onclick: async () => {
+        const inv = inventory.find(x => x.id === fItem.value);
+        if (!inv) { toast('Select an item from the inventory', 'error'); return; }
         const { error } = await supabase.rpc('upsert_equipment_item', {
-          p_id: null, p_session_id: s.id, p_item_name: fName.value.trim(), p_quantity: Number(fQty.value) || 1, p_checked: false, p_notes: null,
+          p_id: null, p_session_id: s.id, p_item_name: inv.name, p_quantity: Number(fQty.value) || 1,
+          p_checked: false, p_notes: fNote.value.trim() || null, p_inventory_item_id: inv.id,
         });
-        if (error) toast(error.message || 'Failed', 'error'); else { fName.value = ''; renderEquipment(s, body); }
+        if (error) toast(error.message || 'Failed', 'error');
+        else { fItem.value = ''; fQty.value = 1; fNote.value = ''; renderEquipment(s, body); }
       }}, 'Add');
-      addBar.append(fName, fQty, btn);
-      body.appendChild(addBar);
+      addWrap.appendChild(fItem);
+      addWrap.appendChild(el('div', { class: 'flex items-center gap-2' }, fQty, fNote, btn));
+      if (inventory.length === 0) addWrap.appendChild(el('div', { class: 'text-xs text-stone-500' }, 'The inventory register is empty. Add equipment under Inventory first.'));
+      body.appendChild(addWrap);
     }
   }
 
