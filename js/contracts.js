@@ -358,7 +358,7 @@
           sessionRate, expenses,
         });
         if (fId.value.trim()) {
-          await supabase.from('users').update({ id_number: fId.value.trim() }).eq('id', selectedMember.id);
+          await supabase.rpc('set_member_id_number', { p_user_id: selectedMember.id, p_id_number: fId.value.trim() });
         }
         if (isEditing) {
           const { error } = await supabase.rpc('update_contract', {
