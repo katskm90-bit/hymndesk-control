@@ -647,8 +647,8 @@
     main.innerHTML = `
       <section class="bg-white rounded-2xl border border-stone-200 p-6 lg:p-8 shadow-sm">
         <h2 class="text-xl lg:text-2xl font-bold text-stone-900">${escapeHtml(mod.title)}</h2>
-        <p class="text-sm text-stone-600 mt-2">This module is part of the project plan but has not been built yet.</p>
-        <p class="text-sm text-stone-500 mt-4">We will build this module in the order agreed in the brief.</p>
+        <p class="text-sm text-stone-600 mt-2">This section is loading or temporarily unavailable.</p>
+        <p class="text-sm text-stone-500 mt-4">Try a hard refresh, or check back shortly.</p>
       </section>
     `;
   }
