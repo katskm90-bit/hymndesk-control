@@ -263,13 +263,13 @@
     if (i.mode === 'Virtual') {
       body.appendChild(el('div', { class:'bg-stone-50 border border-stone-200 rounded-lg p-3' },
         el('div', { class:'font-medium text-stone-700' }, 'Virtual meeting'),
-        i.meeting_link ? el('a', { href:i.meeting_link, target:'_blank', class:'text-brand-600 hover:text-brand-700 break-all' }, i.meeting_link) : el('div', { class:'text-stone-500' }, 'Link to be confirmed')));
+        i.meeting_link ? el('a', { href:i.meeting_link, target:'_blank', rel:'noopener noreferrer', class:'text-brand-600 hover:text-brand-700 break-all' }, i.meeting_link) : el('div', { class:'text-stone-500' }, 'Link to be confirmed')));
     } else {
       const loc = el('div', { class:'bg-stone-50 border border-stone-200 rounded-lg p-3' },
         el('div', { class:'font-medium text-stone-700' }, 'In person'));
       if (i.address) loc.appendChild(el('div', { class:'text-stone-700' }, i.address));
-      if (i.directions_link) loc.appendChild(el('a', { href:i.directions_link, target:'_blank', class:'text-brand-600 hover:text-brand-700' }, 'Get directions'));
-      else if (i.address) loc.appendChild(el('a', { href:mapsLink(i.address), target:'_blank', class:'text-brand-600 hover:text-brand-700' }, 'Get directions'));
+      if (i.directions_link) loc.appendChild(el('a', { href:i.directions_link, target:'_blank', rel:'noopener noreferrer', class:'text-brand-600 hover:text-brand-700' }, 'Get directions'));
+      else if (i.address) loc.appendChild(el('a', { href:mapsLink(i.address), target:'_blank', rel:'noopener noreferrer', class:'text-brand-600 hover:text-brand-700' }, 'Get directions'));
       body.appendChild(loc);
     }
 
