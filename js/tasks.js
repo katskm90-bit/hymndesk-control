@@ -65,7 +65,7 @@
         p_status: filterStatus || null, p_priority: filterPriority || null,
         p_project_id: projectId,
       }),
-      supabase.from('users').select('id, full_name').eq('is_active', true).order('full_name'),
+      supabase.rpc('list_assignable_members'),
       supabase.rpc('list_phases', { p_project_id: projectId }),
       supabase.from('lookups').select('id, value, sort_order').eq('domain','task_category').eq('is_active',true).order('sort_order'),
       supabase.from('lookups').select('id, value, sort_order').eq('domain','task_priority').eq('is_active',true).order('sort_order'),
