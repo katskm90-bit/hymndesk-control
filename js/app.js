@@ -21,6 +21,7 @@
     { id: 'mytasks',      title: 'My Tasks',                    icon: 'check',   roles: null },
     { id: 'taskboard',    title: 'Task Status Board',           icon: 'columns', roles: ['Admin','Project Manager'] },
     { id: 'inventory',    title: 'Inventory',                   icon: 'box',     roles: ['Admin','Project Manager','Director / Producer','Videography / Editing Lead','Sound Engineer'] },
+    { id: 'invitations',  title: 'Invitations',                 icon: 'mail',    roles: null },
     { id: 'tasks',        title: 'Master Task Tracker',         icon: 'list',    roles: null },
     { id: 'phases',       title: 'Project Phases',              icon: 'flag',    roles: null },
     { id: 'sessions',     title: 'Production Schedule',         icon: 'film',    roles: null },
@@ -53,6 +54,7 @@
     fileText:  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h8"/></svg>',
     columns:   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="6" height="18" rx="1"/><rect x="15" y="3" width="6" height="18" rx="1"/></svg>',
     box:       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+    mail:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>',
     receipt:   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3v18l3-2 3 2 3-2 3 2 3-2V3"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>',
     chart:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="21" x2="21" y2="21"/><rect x="6" y="11" width="3" height="9"/><rect x="11" y="6" width="3" height="14"/><rect x="16" y="14" width="3" height="6"/></svg>',
     'arrow-up':'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>',
@@ -528,6 +530,12 @@
     if (mod.id === 'inventory' && window.HD_Inventory) {
       main.innerHTML = '';
       window.HD_Inventory.render(main, { supabase: state.supabase });
+      return;
+    }
+
+    if (mod.id === 'invitations' && window.HD_Invitations) {
+      main.innerHTML = '';
+      window.HD_Invitations.render(main, { supabase: state.supabase });
       return;
     }
 
