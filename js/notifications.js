@@ -51,6 +51,8 @@
       myRole = prof?.role?.name || null;
     } catch (e) { return; }
     await refresh();
+    // Show a one-time "things waiting for you" popup per browser session
+    maybeShowActionPopup();
   };
 
   M.refresh = refresh;
@@ -118,4 +120,47 @@
 
   // Close the panel when clicking elsewhere
   document.addEventListener('click', () => { if (open) { open = false; render(); } });
+
+  // ----- On-open popup --------------------------------------------------
+  // Shows once per browser session, listing what is waiting for the member.
+  async function maybeShowActionPopup() {
+    try {
+      if (sessionStorage.getItem('hdctl_action_popup_shown') === '1') return;
+      const { data, error } = await supabase.rpc('my_action_summary');
+      if (error || !data || !data.length) return;
+      const row = data[0];
+      const overdueCount = row.overdue_tasks || 0;
+      const invCount = row.pending_invitations || 0;
+      if (overdueCount === 0 && invCount === 0) return;
+
+      sessionStorage.setItem('hdctl_action_popup_shown', '1');
+
+      const overlay = el('div', { class:'fixed inset-0 z-[70] bg-stone-900/50 flex items-end sm:items-center justify-center p-0 sm:p-4' });
+      const dialog  = el('div', { class:'bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl' });
+      overlay.appendChild(dialog);
+      dialog.appendChild(el('div', { class:'px-5 py-4 border-b border-stone-200' },
+        el('h3', { class:'text-base font-semibold' }, 'A few things need your attention')));
+      const body = el('div', { class:'p-5 space-y-3 text-sm' });
+      if (overdueCount > 0) {
+        body.appendChild(el('div', { class:'flex items-start justify-between gap-3 bg-red-50 border border-red-200 rounded-lg p-3' },
+          el('div', null,
+            el('div', { class:'font-medium text-red-800' }, overdueCount === 1 ? 'You have 1 overdue task' : `You have ${overdueCount} overdue tasks`),
+            el('div', { class:'text-xs text-red-700 mt-0.5' }, 'Past the target date and not yet complete.')),
+          el('button', { class:'text-sm bg-stone-900 hover:bg-stone-800 text-white px-3 py-1.5 rounded-lg shrink-0',
+            onclick:()=>{ overlay.remove(); window.location.hash = '#/mytasks'; } }, 'Open')));
+      }
+      if (invCount > 0) {
+        body.appendChild(el('div', { class:'flex items-start justify-between gap-3 bg-brand-50 border border-brand-200 rounded-lg p-3' },
+          el('div', null,
+            el('div', { class:'font-medium text-stone-900' }, invCount === 1 ? 'You have 1 invitation to respond to' : `You have ${invCount} invitations to respond to`),
+            el('div', { class:'text-xs text-stone-600 mt-0.5' }, 'Please confirm your availability.')),
+          el('button', { class:'text-sm bg-brand-500 hover:bg-brand-600 text-white px-3 py-1.5 rounded-lg shrink-0',
+            onclick:()=>{ overlay.remove(); window.location.hash = '#/invitations'; } }, 'Open')));
+      }
+      dialog.appendChild(body);
+      dialog.appendChild(el('div', { class:'px-5 py-4 border-t border-stone-200 flex items-center justify-end' },
+        el('button', { class:'text-sm text-stone-600 hover:text-stone-800', onclick:()=>overlay.remove() }, 'Dismiss')));
+      document.body.appendChild(overlay);
+    } catch (_e) { /* silent */ }
+  }
 })();
